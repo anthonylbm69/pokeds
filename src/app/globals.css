@@ -3,14 +3,16 @@
 /* =====================================================================
    Pokédex — Édition Unys
    Une console à deux écrans inspirée de Pokémon Version Noire et Blanche.
-   Écran du haut : affichage. Écran du bas : tactile, toutes les commandes.
+   Coque posée à l'écran (déplaçable), dalle du haut pour l'affichage,
+   dalle du bas tactile, croix directionnelle et boutons de part et d'autre.
    ===================================================================== */
 
 :root {
   /* Coque */
-  --shell-1: #23262e;
-  --shell-2: #0d0f14;
-  --shell-edge: #4a4f5c;
+  --shell-1: #2b2f38;
+  --shell-2: #14171d;
+  --shell-3: #0b0d12;
+  --shell-edge: rgba(255, 255, 255, 0.16);
   --shell-line: #05060a;
 
   /* Écrans */
@@ -32,6 +34,10 @@
 
   --line: #bfd0da;
   --radius: 10px;
+
+  /* Dalle DS : 256 × 192, doublée. */
+  --dalle-w: 512px;
+  --dalle-h: 384px;
 }
 
 /* Couleurs de types, reprises de la charte des jeux. */
@@ -62,6 +68,7 @@ body {
     radial-gradient(900px 600px at 90% 110%, #1d2b38 0%, transparent 55%),
     #0b0d11;
   min-height: 100dvh;
+  overflow: hidden;
 }
 
 /* Trame de fond très discrète, façon plastique texturé. */
@@ -75,150 +82,206 @@ body::before {
   opacity: 0.5;
 }
 
+/* La scène : la console y flotte et peut se déplacer librement. */
 .page {
-  position: relative;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: clamp(12px, 3vw, 32px);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
 }
 
 .page__credit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  text-align: center;
   color: var(--ink-faint);
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  pointer-events: none;
 }
 
 .page__credit a {
   color: var(--accent);
   text-decoration: none;
   border-bottom: 1px dotted currentColor;
+  pointer-events: auto;
 }
 
-/* ----------------------------------------------------------- la console */
+/* ============================================================= la console */
 
-.console {
-  width: min(100%, 1180px);
-  border-radius: 26px;
-  padding: clamp(10px, 1.4vw, 18px);
-  background: linear-gradient(160deg, var(--shell-1), var(--shell-2) 60%);
+.ds {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 820px;
+  transform-origin: center;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  filter: drop-shadow(0 42px 60px rgba(0, 0, 0, 0.8));
+  transition: opacity 0.2s ease;
+}
+
+.ds__lid,
+.ds__base {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    var(--shell-1) 0%,
+    var(--shell-2) 48%,
+    var(--shell-3) 100%
+  );
   box-shadow:
     inset 0 1px 0 var(--shell-edge),
-    inset 0 -2px 6px rgba(0, 0, 0, 0.8),
-    0 30px 70px -20px rgba(0, 0, 0, 0.9),
-    0 0 0 1px var(--shell-line);
+    inset 0 0 0 1px rgba(0, 0, 0, 0.85),
+    0 2px 0 rgba(0, 0, 0, 0.5);
 }
 
-.console__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+.ds__lid {
+  border-radius: 30px 30px 10px 10px;
+  padding: 22px 24px 18px;
 }
 
-@media (min-width: 1024px) {
-  .console__body {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: stretch;
-    gap: 0;
+.ds__base {
+  border-radius: 10px 10px 30px 30px;
+  padding: 20px 24px 16px;
+}
+
+/* Calque de préhension : tout le plastique, derrière écrans et boutons. */
+.ds__grab {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  cursor: grab;
+  touch-action: none;
+}
+
+.ds.is-dragging .ds__grab,
+.ds.is-dragging .ds__hinge {
+  cursor: grabbing;
+}
+
+/* ------------------------------------------------------------ le capot */
+
+.ds__lid-face {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #0b0d11, #050609);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 30px rgba(0, 0, 0, 0.9);
+}
+
+.ds__speaker {
+  flex: none;
+  width: 46px;
+  height: 132px;
+  border-radius: 6px;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.9) 1.5px, transparent 1.7px);
+  background-size: 9px 9px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  opacity: 0.85;
+}
+
+/* Diode d'alimentation, en bas à gauche du capot. */
+.ds__led {
+  position: absolute;
+  left: 34px;
+  bottom: 7px;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7ef2a1;
+  box-shadow: 0 0 8px 2px rgba(126, 242, 161, 0.7);
+  animation: led 3.4s ease-in-out infinite;
+}
+
+@keyframes led {
+  50% {
+    opacity: 0.55;
   }
 }
 
-/* La charnière : marque, haut-parleur et compteur du dex. */
-.hinge {
+/* --------------------------------------------------------- la charnière */
+
+.ds__hinge {
+  position: relative;
+  z-index: 2;
+  height: 46px;
+  margin: 0 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #0a0c10, #171a21);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  gap: 16px;
+  padding: 0 20px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #262a33, #0a0c10 55%, #191c23);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(0, 0, 0, 0.6);
+  cursor: grab;
+  touch-action: none;
 }
 
-.hinge__brand {
+/* Les deux embouts cylindriques de la charnière. */
+.ds__hinge-cap {
+  flex: none;
+  width: 54px;
+  height: 30px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #363b46, #12151b);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.ds__brand {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.3em;
   color: var(--warm);
-  text-shadow: 0 0 12px rgba(242, 160, 60, 0.5);
+  text-shadow: 0 0 12px rgba(242, 160, 60, 0.55);
 }
 
-.hinge__grill {
-  flex: 1;
-  height: 8px;
-  border-radius: 4px;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px);
-  background-size: 6px 6px;
-}
+/* --------------------------------------------------------- les dalles */
 
-.hinge__count {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (min-width: 1024px) {
-  .hinge {
-    flex-direction: column;
-    width: 46px;
-    margin: 0 10px;
-    padding: 16px 0;
-    border-radius: 14px;
-  }
-
-  .hinge__brand,
-  .hinge__count {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-  }
-
-  .hinge__grill {
-    width: 8px;
-    height: auto;
-  }
-}
-
-/* ------------------------------------------------------------- écrans */
-
-.screen {
-  padding: 12px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #16181e, #0a0b0f);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 2px 10px rgba(0, 0, 0, 0.9);
-}
-
-@media (min-width: 1024px) {
-  .screen {
-    aspect-ratio: 4 / 3;
-  }
-}
-
-.screen__glass {
+.ds__screen {
   position: relative;
-  height: 100%;
-  min-height: 360px;
+  flex: none;
+  width: var(--dalle-w);
+  height: var(--dalle-h);
+  border-radius: 4px;
+  background: #05060a;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 3px rgba(255, 255, 255, 0.05),
+    0 0 26px rgba(0, 0, 0, 0.75);
+}
+
+.ds__glass {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 3px;
   background: linear-gradient(180deg, var(--screen), var(--screen-2));
   box-shadow: 0 0 22px rgba(47, 163, 214, 0.14);
-}
-
-@media (min-width: 1024px) {
-  .screen__glass {
-    min-height: 0;
-  }
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Voile de balayage : la DS avait cette texture de dalle. */
-.screen__glass::after {
+.ds__glass::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -228,6 +291,531 @@ body::before {
     rgba(10, 30, 45, 0.05) 0 1px,
     transparent 1px 3px
   );
+}
+
+/* Éclair blanc au lancement du jeu. */
+.ds__flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 3px;
+  pointer-events: none;
+  background: #fff;
+  animation: flashOut 0.42s ease-out both;
+}
+
+@keyframes flashOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* -------------------------------------------------- le plateau du bas */
+
+.ds__deck {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.ds__btn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(212, 222, 236, 0.75);
+  background: linear-gradient(180deg, #3f4550, #23262e);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 2px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition:
+    background 0.08s ease,
+    box-shadow 0.08s ease,
+    transform 0.08s ease;
+}
+
+.ds__btn[data-pressed="true"] {
+  transform: translateY(1px);
+  color: var(--accent);
+  background: linear-gradient(180deg, #262a33, #171a20);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.8);
+}
+
+/* Croix directionnelle */
+.ds__dpad {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  margin: 0 auto;
+}
+
+.ds__d {
+  font-size: 8px;
+}
+
+.ds__d--up {
+  left: 34px;
+  top: 0;
+  width: 36px;
+  height: 38px;
+  border-radius: 8px 8px 0 0;
+  align-items: start;
+  padding-top: 5px;
+}
+
+.ds__d--down {
+  left: 34px;
+  top: 66px;
+  width: 36px;
+  height: 38px;
+  border-radius: 0 0 8px 8px;
+  align-items: end;
+  padding-bottom: 5px;
+}
+
+.ds__d--left {
+  left: 0;
+  top: 34px;
+  width: 38px;
+  height: 36px;
+  border-radius: 8px 0 0 8px;
+  justify-items: start;
+  padding-left: 5px;
+}
+
+.ds__d--right {
+  left: 66px;
+  top: 34px;
+  width: 38px;
+  height: 36px;
+  border-radius: 0 8px 8px 0;
+  justify-items: end;
+  padding-right: 5px;
+}
+
+.ds__dpad-hub {
+  position: absolute;
+  left: 32px;
+  top: 32px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 35%, #3c414c, #20232a 70%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Boutons de façade, en losange */
+.ds__face {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  margin: 0 auto;
+}
+
+.ds__f {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.ds__f--x { left: 38px; top: 0; }
+.ds__f--y { left: 0; top: 38px; }
+.ds__f--a { left: 76px; top: 38px; }
+.ds__f--b { left: 38px; top: 76px; }
+
+/* Gâchettes, à cheval sur la charnière comme sur la vraie console. */
+.ds__shoulder {
+  position: absolute;
+  top: -14px;
+  z-index: 1;
+  width: 118px;
+  height: 36px;
+  display: grid;
+  place-items: end center;
+  padding-bottom: 3px;
+  border-radius: 10px 10px 4px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: rgba(212, 222, 236, 0.7);
+  background: linear-gradient(180deg, #343946, #171a21);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 2px 4px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.ds__shoulder--l { left: 22px; }
+.ds__shoulder--r { right: 22px; }
+
+.ds__shoulder[data-pressed="true"] {
+  color: var(--accent);
+  background: linear-gradient(180deg, #22262e, #12151a);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75);
+}
+
+/* Bandeau sous l'écran tactile : compteur, micro, SELECT et START. */
+.ds__tray {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  margin-top: 14px;
+  min-height: 30px;
+}
+
+.ds__count {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.ds__mic {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #04050a;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.ds__pills {
+  display: flex;
+  gap: 10px;
+  justify-content: end;
+}
+
+.ds__pill {
+  position: relative;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(212, 222, 236, 0.7);
+  background: linear-gradient(180deg, #3a3f4a, #1e2128);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 3px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.ds__pill[data-pressed="true"] {
+  transform: translateY(1px);
+  color: var(--accent);
+  background: linear-gradient(180deg, #23272f, #16181e);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.75);
+}
+
+/* ======================================================= le démarrage */
+
+.bios {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0;
+  background: #000;
+  color: #fff;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* Allumage : la ligne de balayage s'ouvre puis se dilate. */
+.bios__crt {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 50%;
+  height: 2px;
+  border-radius: 2px;
+  background: #dff3ff;
+  box-shadow: 0 0 20px 4px rgba(120, 210, 255, 0.7);
+  animation: crtOn 0.95s ease-out both;
+}
+
+@keyframes crtOn {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  22% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  60% {
+    transform: scaleX(1) scaleY(40);
+    opacity: 0.28;
+  }
+  100% {
+    transform: scaleX(1) scaleY(70);
+    opacity: 0;
+  }
+}
+
+/* L'étoile filante du logo, puis le logo. */
+.bios__star {
+  position: absolute;
+  top: 34%;
+  left: -12%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 14px 5px rgba(255, 255, 255, 0.85);
+  animation: shoot 1.05s cubic-bezier(0.32, 0.7, 0.42, 1) both;
+}
+
+.bios__star::after {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 140px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.9), transparent);
+}
+
+@keyframes shoot {
+  0% {
+    left: -12%;
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  100% {
+    left: 108%;
+    opacity: 0;
+  }
+}
+
+.bios__gf {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: gfIn 0.85s ease-out both;
+  animation-delay: 0.9s;
+}
+
+@keyframes gfIn {
+  from {
+    opacity: 0;
+    transform: scale(0.93);
+    filter: blur(3px);
+  }
+}
+
+.bios__gf-mark {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  color: #fff;
+  text-shadow: 0 0 26px rgba(190, 225, 255, 0.55);
+}
+
+.bios__gf-sub {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  color: #7f93a8;
+}
+
+/* Écran de mentions légales. */
+.bios__legal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 40px;
+  animation: fadeIn 0.6s ease-out both;
+}
+
+.bios__legal-line {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #e6eef6;
+}
+
+.bios__legal-sub {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #6f8296;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------- écran-titre */
+
+.bios--title {
+  background:
+    radial-gradient(120% 85% at 50% 12%, #24344a 0%, #0d131c 55%, #04060a 100%);
+}
+
+.bios__sky {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.5) 1px, transparent 1px),
+    radial-gradient(rgba(160, 210, 255, 0.35) 1px, transparent 1px);
+  background-size: 60px 60px, 90px 90px;
+  background-position: 0 0, 28px 42px;
+  animation: drift 24s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes drift {
+  to {
+    background-position: 60px 0, 88px 42px;
+  }
+}
+
+.bios__mon {
+  position: absolute;
+  bottom: 12%;
+  width: 128px;
+  image-rendering: pixelated;
+  animation: hover 5.5s ease-in-out infinite alternate;
+}
+
+.bios__mon--light {
+  left: 2%;
+  filter: drop-shadow(0 0 20px rgba(220, 240, 255, 0.55));
+}
+
+.bios__mon--dark {
+  right: 2%;
+  animation-delay: -2.7s;
+  filter: drop-shadow(0 0 20px rgba(140, 120, 255, 0.5));
+}
+
+@keyframes hover {
+  to {
+    transform: translateY(-10px);
+  }
+}
+
+.bios__logo {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: logoIn 0.9s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+@keyframes logoIn {
+  from {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+.bios__word {
+  font-size: 62px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #ffffff 26%, #c3d1de 54%, #7d8fa2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Le contour du logo : quatre ombres plutôt qu'un text-stroke, qui
+     passerait par-dessus le dégradé. */
+  filter:
+    drop-shadow(1.5px 0 0 #05070c) drop-shadow(-1.5px 0 0 #05070c)
+    drop-shadow(0 1.5px 0 #05070c) drop-shadow(0 -1.5px 0 #05070c)
+    drop-shadow(0 5px 0 rgba(0, 0, 0, 0.55))
+    drop-shadow(0 0 26px rgba(120, 190, 255, 0.4));
+}
+
+.bios__ver {
+  padding: 5px 18px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #0a0e14;
+  background: linear-gradient(180deg, #f4f8fb, #b9c8d6);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.6),
+    0 0 18px rgba(150, 200, 255, 0.3);
+}
+
+.bios__press {
+  position: absolute;
+  bottom: 7%;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-indent: 0.26em;
+  color: #eaf4ff;
+  text-shadow: 0 2px 0 #05070c;
+  animation: blink 1.15s steps(1, end) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Dalle du bas pendant l'écran-titre. */
+.bios--lower.bios--title {
+  background: radial-gradient(90% 70% at 50% 50%, #101822, #04060a 75%);
+}
+
+.bios__touch {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  color: #cfe3f4;
+  animation: pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.bios__meta {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: #5f7386;
 }
 
 /* ------------------------------------------------------------ démarrage */
@@ -305,7 +893,7 @@ body::before {
 }
 
 .dex__name {
-  font-size: clamp(18px, 2.4vw, 26px);
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1.1;
@@ -325,13 +913,6 @@ body::before {
   grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
   gap: 10px;
   padding: 10px;
-}
-
-@media (max-width: 520px) {
-  .dex__body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-  }
 }
 
 /* ------------------------------------------------------------- sprite */
@@ -373,7 +954,7 @@ body::before {
 .stage__sprite {
   position: relative;
   z-index: 1;
-  height: clamp(84px, 15vh, 150px);
+  height: 120px;
   width: auto;
   max-width: 90%;
   object-fit: contain;
@@ -900,10 +1481,17 @@ body::before {
 }
 
 .hint {
-  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 8px;
   font-size: 9px;
   letter-spacing: 0.04em;
   color: var(--ink-faint);
+}
+
+.hint__item {
+  white-space: nowrap;
 }
 
 .hint kbd {

@@ -34,6 +34,18 @@ const TABS: { id: DexTab; label: string }[] = [
   { id: "evo", label: "ÉVOLUTION" },
 ];
 
+const HINTS: [string, string][] = [
+  ["▲▼", "liste"],
+  ["◀▶", "onglets"],
+  ["A", "cri"],
+  ["B", "effacer"],
+  ["X", "son"],
+  ["Y", "hasard"],
+  ["L R", "±10"],
+  ["START", "recherche"],
+  ["SELECT", "génération"],
+];
+
 /** Écran tactile du bas : recherche, filtres, liste et commandes. */
 export default function BottomScreen({
   entries,
@@ -53,7 +65,7 @@ export default function BottomScreen({
 }: Props) {
   const listRef = useRef<HTMLUListElement>(null);
 
-  // Garde la ligne sélectionnée visible, y compris en navigation clavier.
+  // Garde la ligne sélectionnée visible, y compris à la croix directionnelle.
   useEffect(() => {
     const row = listRef.current?.querySelector<HTMLElement>(
       `[data-id="${selectedId}"]`,
@@ -62,116 +74,112 @@ export default function BottomScreen({
   }, [selectedId, entries]);
 
   return (
-    <section className="screen screen--bottom" aria-label="Écran tactile">
-      <div className="screen__glass screen__glass--touch">
-        <div className="touch">
-          <div className="touch__search">
-            <span className="touch__icon" aria-hidden="true">
-              ⌕
-            </span>
-            <input
-              ref={searchRef}
-              className="touch__input"
-              type="search"
-              value={query}
-              placeholder="Nom ou numéro…"
-              aria-label="Rechercher un Pokémon"
-              onChange={(e) => onQuery(e.target.value)}
-            />
-            <button
-              type="button"
-              className={`touch__sound${sound ? " is-on" : ""}`}
-              onClick={onSound}
-              aria-pressed={sound}
-              title={sound ? "Couper le son" : "Activer le son"}
-            >
-              {sound ? "♪" : "✕"}
-            </button>
-          </div>
+    <div className="touch">
+      <div className="touch__search">
+        <span className="touch__icon" aria-hidden="true">
+          ⌕
+        </span>
+        <input
+          ref={searchRef}
+          className="touch__input"
+          type="search"
+          value={query}
+          placeholder="Nom ou numéro…"
+          aria-label="Rechercher un Pokémon"
+          onChange={(e) => onQuery(e.target.value)}
+        />
+        <button
+          type="button"
+          className={`touch__sound${sound ? " is-on" : ""}`}
+          onClick={onSound}
+          aria-pressed={sound}
+          title={sound ? "Couper le son" : "Activer le son"}
+        >
+          {sound ? "♪" : "✕"}
+        </button>
+      </div>
 
-          <div className="gens" role="group" aria-label="Filtrer par génération">
-            {GENERATIONS.map((g) => (
+      <div className="gens" role="group" aria-label="Filtrer par génération">
+        {GENERATIONS.map((g) => (
+          <button
+            type="button"
+            key={g.id}
+            className={`gens__chip${gen === g.id ? " is-active" : ""}`}
+            onClick={() => onGen(g.id)}
+            title={g.region}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      <ul className="list" ref={listRef}>
+        {entries.map((entry) => {
+          const active = entry.id === selectedId;
+          return (
+            <li key={entry.id}>
               <button
                 type="button"
-                key={g.id}
-                className={`gens__chip${gen === g.id ? " is-active" : ""}`}
-                onClick={() => onGen(g.id)}
-                title={g.region}
+                data-id={entry.id}
+                className={`row${active ? " row--active" : ""}`}
+                onClick={() => onSelect(entry.id)}
+                aria-current={active}
               >
-                {g.label}
+                <span className="row__cursor" aria-hidden="true">
+                  ▶
+                </span>
+                <img
+                  className="row__icon"
+                  src={iconUrl(entry.id)}
+                  alt=""
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.src = staticUrl(entry.id);
+                  }}
+                />
+                <span className="row__no">{padDex(entry.id)}</span>
+                <span className="row__name">{displayName(entry.name)}</span>
               </button>
-            ))}
-          </div>
+            </li>
+          );
+        })}
+        {!entries.length && <li className="list__empty">Aucun Pokémon trouvé.</li>}
+      </ul>
 
-          <ul className="list" ref={listRef}>
-            {entries.map((entry) => {
-              const active = entry.id === selectedId;
-              return (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    data-id={entry.id}
-                    className={`row${active ? " row--active" : ""}`}
-                    onClick={() => onSelect(entry.id)}
-                    aria-current={active}
-                  >
-                    <span className="row__cursor" aria-hidden="true">
-                      ▶
-                    </span>
-                    <img
-                      className="row__icon"
-                      src={iconUrl(entry.id)}
-                      alt=""
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.src = staticUrl(entry.id);
-                      }}
-                    />
-                    <span className="row__no">{padDex(entry.id)}</span>
-                    <span className="row__name">{displayName(entry.name)}</span>
-                  </button>
-                </li>
-              );
-            })}
-            {!entries.length && (
-              <li className="list__empty">Aucun Pokémon trouvé.</li>
-            )}
-          </ul>
-
-          <div className="controls">
-            <div className="controls__tabs" role="tablist">
-              {TABS.map((t) => (
-                <button
-                  type="button"
-                  key={t.id}
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  className={`controls__tab${tab === t.id ? " is-active" : ""}`}
-                  onClick={() => onTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+      <div className="controls">
+        <div className="controls__tabs" role="tablist">
+          {TABS.map((t) => (
             <button
               type="button"
-              className="controls__cry"
-              onClick={onCry}
-              disabled={!hasCry}
-              title="Écouter le cri"
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              className={`controls__tab${tab === t.id ? " is-active" : ""}`}
+              onClick={() => onTab(t.id)}
             >
-              CRI
+              {t.label}
             </button>
-          </div>
-
-          <p className="hint">
-            <kbd>↑</kbd>
-            <kbd>↓</kbd> naviguer · <kbd>←</kbd>
-            <kbd>→</kbd> onglets · <kbd>Entrée</kbd> cri · <kbd>/</kbd>{" "}
-            rechercher
-          </p>
+          ))}
         </div>
+        <button
+          type="button"
+          className="controls__cry"
+          onClick={onCry}
+          disabled={!hasCry}
+          title="Écouter le cri"
+        >
+          CRI
+        </button>
       </div>
-    </section>
+
+      {/* Rappel des commandes de la coque, dans l'ordre des boutons. */}
+      <p className="hint">
+        {HINTS.map(([keys, label]) => (
+          <span key={label} className="hint__item">
+            <kbd>{keys}</kbd> {label}
+          </span>
+        ))}
+      </p>
+    </div>
   );
 }

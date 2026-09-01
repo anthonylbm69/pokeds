@@ -16,7 +16,8 @@ export default async function Home() {
     <main className="page">
       <Pokedex index={index} />
       <p className="page__credit">
-        Données &amp; sprites :{" "}
+        Glissez la coque pour la déplacer · molette pour zoomer · double-clic
+        pour recentrer — données &amp; sprites :{" "}
         <a href="https://pokeapi.co" target="_blank" rel="noreferrer">
           PokéAPI
         </a>

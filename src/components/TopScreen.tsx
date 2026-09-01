@@ -28,67 +28,67 @@ export default function TopScreen({
   tab,
   onSelect,
 }: Props) {
-  return (
-    <section className="screen screen--top" aria-label="Écran supérieur">
-      <div className="screen__glass">
-        {error && !detail ? (
-          <div className="boot">
-            <p className="boot__title">ERREUR DE LIAISON</p>
-            <p className="boot__sub">{error}</p>
-          </div>
-        ) : !detail ? (
-          <div className="boot">
-            <span className="boot__ring" />
-            <p className="boot__title">INITIALISATION DU POKÉDEX</p>
-            <p className="boot__sub">Connexion à la base de données…</p>
-          </div>
-        ) : (
-          <div className={`dex${pending ? " dex--pending" : ""}`}>
-            <header className="dex__head">
-              <span className="dex__no">N°{padDex(detail.id)}</span>
-              <h1 className="dex__name">{detail.name}</h1>
-              <span className="dex__genus">
-                {detail.nameFr && detail.nameFr !== detail.name
-                  ? `${detail.nameFr} · ${detail.genus}`
-                  : detail.genus}
-              </span>
-            </header>
-
-            <div className="dex__body">
-              <figure className="stage">
-                <div className="stage__halo" />
-                {/* Sprite animé Génération V — l'image même de Noir/Blanc. */}
-                <img
-                  key={detail.id}
-                  className="stage__sprite"
-                  src={detail.sprite}
-                  alt={detail.name}
-                  onError={(e) => {
-                    e.currentTarget.src = staticUrl(detail.id);
-                  }}
-                />
-                <div className="stage__pad" />
-                <figcaption className="stage__types">
-                  {detail.types.map((t) => (
-                    <span key={t} className={`type type--${t}`}>
-                      {TYPE_LABELS[t] ?? t}
-                    </span>
-                  ))}
-                </figcaption>
-              </figure>
-
-              <div className="panel">
-                {tab === "info" && <InfoTab detail={detail} />}
-                {tab === "stats" && <StatsTab detail={detail} />}
-                {tab === "evo" && (
-                  <EvoTab detail={detail} onSelect={onSelect} />
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+  if (error && !detail) {
+    return (
+      <div className="boot">
+        <p className="boot__title">ERREUR DE LIAISON</p>
+        <p className="boot__sub">{error}</p>
       </div>
-    </section>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="boot">
+        <span className="boot__ring" />
+        <p className="boot__title">INITIALISATION DU POKÉDEX</p>
+        <p className="boot__sub">Connexion à la base de données…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`dex${pending ? " dex--pending" : ""}`}>
+      <header className="dex__head">
+        <span className="dex__no">N°{padDex(detail.id)}</span>
+        <h1 className="dex__name">{detail.name}</h1>
+        <span className="dex__genus">
+          {detail.nameFr && detail.nameFr !== detail.name
+            ? `${detail.nameFr} · ${detail.genus}`
+            : detail.genus}
+        </span>
+      </header>
+
+      <div className="dex__body">
+        <figure className="stage">
+          <div className="stage__halo" />
+          {/* Sprite animé Génération V — l'image même de Noir/Blanc. */}
+          <img
+            key={detail.id}
+            className="stage__sprite"
+            src={detail.sprite}
+            alt={detail.name}
+            onError={(e) => {
+              e.currentTarget.src = staticUrl(detail.id);
+            }}
+          />
+          <div className="stage__pad" />
+          <figcaption className="stage__types">
+            {detail.types.map((t) => (
+              <span key={t} className={`type type--${t}`}>
+                {TYPE_LABELS[t] ?? t}
+              </span>
+            ))}
+          </figcaption>
+        </figure>
+
+        <div className="panel">
+          {tab === "info" && <InfoTab detail={detail} />}
+          {tab === "stats" && <StatsTab detail={detail} />}
+          {tab === "evo" && <EvoTab detail={detail} onSelect={onSelect} />}
+        </div>
+      </div>
+    </div>
   );
 }
 
