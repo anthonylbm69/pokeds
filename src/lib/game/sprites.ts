@@ -107,14 +107,15 @@ const LEGS: string[][] = [
 ];
 
 const PALETTES: Record<NpcSprite | "joueur", Palette> = {
-  joueur: { o: "#171a20", h: "#c0392b", H: "#7e2418", s: "#f0c49a", e: "#241d18", b: "#2f6db5", p: "#2b3a52", f: "#22262c" },
-  prof: { o: "#171a20", h: "#8a6a4a", H: "#6b5138", s: "#f0c49a", e: "#241d18", b: "#eef2f6", p: "#5a6472", f: "#2a2f38" },
-  maman: { o: "#171a20", h: "#a8562f", H: "#83411f", s: "#f0c49a", e: "#241d18", b: "#d2698f", p: "#4a5468", f: "#2a2f38" },
-  infirmiere: { o: "#171a20", h: "#f2a3bd", H: "#d3819c", s: "#f0c49a", e: "#241d18", b: "#f6f8fa", p: "#e05a7a", f: "#dfe4ea" },
-  vendeur: { o: "#171a20", h: "#2f3a4a", H: "#212a36", s: "#f0c49a", e: "#241d18", b: "#3f7fbf", p: "#2a3648", f: "#22262c" },
-  gamin: { o: "#171a20", h: "#3b4a6b", H: "#2a3550", s: "#f0c49a", e: "#241d18", b: "#e0c04a", p: "#43506a", f: "#2a2f38" },
-  exploratrice: { o: "#171a20", h: "#6b4a2f", H: "#503722", s: "#f0c49a", e: "#241d18", b: "#8fa84e", p: "#5a4a38", f: "#33291f" },
-  villageois: { o: "#171a20", h: "#4a3a2a", H: "#35281c", s: "#f0c49a", e: "#241d18", b: "#7a8a9a", p: "#3a4450", f: "#2a2f38" },
+  joueur: { o: "#171a20", h: "#c0392b", H: "#7e2418", s: "#f0c49a", e: "#241d18", b: "#2f6db5", B: "#1f5290", p: "#2b3a52", f: "#22262c" },
+  prof: { o: "#171a20", h: "#8a6a4a", H: "#6b5138", s: "#f0c49a", e: "#241d18", b: "#eef2f6", B: "#cdd6de", p: "#5a6472", f: "#2a2f38" },
+  maman: { o: "#171a20", h: "#a8562f", H: "#83411f", s: "#f0c49a", e: "#241d18", b: "#d2698f", B: "#b04f73", p: "#4a5468", f: "#2a2f38" },
+  infirmiere: { o: "#171a20", h: "#f2a3bd", H: "#d3819c", s: "#f0c49a", e: "#241d18", b: "#f6f8fa", B: "#d8dee6", p: "#e05a7a", f: "#dfe4ea" },
+  vendeur: { o: "#171a20", h: "#2f3a4a", H: "#212a36", s: "#f0c49a", e: "#241d18", b: "#3f7fbf", B: "#2d5f92", p: "#2a3648", f: "#22262c" },
+  gamin: { o: "#171a20", h: "#3b4a6b", H: "#2a3550", s: "#f0c49a", e: "#241d18", b: "#e0c04a", B: "#bd9d31", p: "#43506a", f: "#2a2f38" },
+  exploratrice: { o: "#171a20", h: "#6b4a2f", H: "#503722", s: "#f0c49a", e: "#241d18", b: "#8fa84e", B: "#6f8639", p: "#5a4a38", f: "#33291f" },
+  championne: { o: "#171a20", h: "#2b2b33", H: "#17171d", s: "#f0c49a", e: "#241d18", b: "#8f4fd0", B: "#6d37a6", p: "#2b2b3a", f: "#1e2028" },
+  villageois: { o: "#171a20", h: "#4a3a2a", H: "#35281c", s: "#f0c49a", e: "#241d18", b: "#7a8a9a", B: "#5f6d7b", p: "#3a4450", f: "#2a2f38" },
 };
 
 /** Planche 3 poses × 3 frames, construite une seule fois par personnage. */
@@ -168,6 +169,92 @@ export function drawCharacter(
     return;
   }
   ctx.drawImage(sheet, sx, sy, TILE, TILE, x, dy, TILE, TILE);
+}
+
+/* ------------------------------------------- sprite de combat (dresseur) */
+
+/**
+ * Le grand portrait affiché à l'ouverture d'un combat de Dresseurs, avant
+ * qu'il n'envoie son premier Pokémon. Vingt-quatre pixels de large.
+ */
+const TRAINER = [
+  "........................",
+  ".......oooooooo.........",
+  "......ohhhhhhhhho.......",
+  ".....ohhhhhhhhhhho......",
+  ".....oHHHHHHHHHHHo......",
+  "......osssssssso........",
+  "......oseessseeso.......",
+  "......ossssssssso.......",
+  ".......ossssssso........",
+  "........ooooooo.........",
+  ".....obbbbbbbbbbbo......",
+  "....obbbbbbbbbbbbbo.....",
+  "...obsbbbbbbbbbbbbso....",
+  "...obsbbbbBBBbbbbbso....",
+  "...obsbbbbBBBbbbbbso....",
+  "...obsbbbbbbbbbbbbso....",
+  "....obbbbbbbbbbbbbo.....",
+  ".....obbbbbbbbbbbo......",
+  "......oooooooooooo......",
+  "......oppppppppppo......",
+  "......oppppppppppo......",
+  "......oppppppppppo......",
+  "......oppppo.oppppo.....",
+  "......oppppo.oppppo.....",
+  "......oppppo.oppppo.....",
+  "......offffo.offffo.....",
+  "......offffo.offffo.....",
+  ".....offfffo.offfffo....",
+  ".....ooooooo.ooooooo....",
+  "........................",
+];
+
+const portraits = new Map<string, string>();
+
+/** Image du dresseur, prête pour une balise `img` : rendue une seule fois. */
+export function trainerPortrait(who: NpcSprite | "joueur"): string {
+  if (typeof document === "undefined") return "";
+  const cached = portraits.get(who);
+  if (cached) return cached;
+
+  const scale = 4;
+  const sheet = canvas(TRAINER[0].length * scale, TRAINER.length * scale);
+  const ctx = sheet.getContext("2d")!;
+  const palette = PALETTES[who];
+
+  TRAINER.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const color = palette[row[x]];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(x * scale, y * scale, scale, scale);
+    }
+  });
+
+  const url = sheet.toDataURL();
+  portraits.set(who, url);
+  return url;
+}
+
+/* ------------------------------------------------------------ le vélo */
+
+const BIKE = [
+  "................",
+  "......kkkk......",
+  "....kkkkkkkk....",
+  "..wwww....wwww..",
+  ".ww..ww..ww..ww.",
+  ".ww..ww..ww..ww.",
+  "..wwww....wwww..",
+  "................",
+];
+
+const BIKE_COLORS: Palette = { k: "#e0483a", w: "#22262c" };
+
+/** Le vélo, glissé sous le héros quand il roule. */
+export function drawBike(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  paint(ctx, BIKE, BIKE_COLORS, x, y + 8);
 }
 
 /* --------------------------------------------------------------- décors */

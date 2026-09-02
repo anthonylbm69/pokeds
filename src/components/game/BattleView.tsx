@@ -3,12 +3,16 @@
 import { animatedBackUrl, animatedUrl, staticBackUrl, staticUrl } from "@/lib/pokeapi";
 import { expForLevel, species } from "@/lib/game/data";
 import { activeMon, maxHp, type BattleState, type Mon } from "@/lib/game/battle";
+import { trainerPortrait } from "@/lib/game/sprites";
+import type { NpcSprite } from "@/lib/game/world";
 
 type Props = {
   state: BattleState;
   message: string | null;
   /** Le lanceur de Poké Ball est en vol. */
   throwing: boolean;
+  /** Le dresseur est encore en scène, avant d'envoyer son premier Pokémon. */
+  trainerSprite?: NpcSprite | null;
 };
 
 const pct = (value: number, total: number) =>
@@ -57,7 +61,7 @@ function Plate({ mon, own }: { mon: Mon; own: boolean }) {
 }
 
 /** L'écran du haut pendant un combat : terrain, jauges et boîte de texte. */
-export default function BattleView({ state, message, throwing }: Props) {
+export default function BattleView({ state, message, throwing, trainerSprite }: Props) {
   const mine = activeMon(state);
   const foe = state.foe;
 
@@ -66,15 +70,23 @@ export default function BattleView({ state, message, throwing }: Props) {
       <div className="battle__field">
         <div className="battle__slot battle__slot--foe">
           <span className="battle__pad" />
-          <img
-            key={`foe-${foe.uid}`}
-            className={`battle__sprite${foe.hp <= 0 ? " battle__sprite--down" : ""}`}
-            src={animatedUrl(foe.id) ?? staticUrl(foe.id)}
-            alt={foe.name}
-            onError={(e) => {
-              e.currentTarget.src = staticUrl(foe.id);
-            }}
-          />
+          {trainerSprite ? (
+            <img
+              className="battle__trainer-sprite"
+              src={trainerPortrait(trainerSprite)}
+              alt={`${state.trainer?.title} ${state.trainer?.name}`}
+            />
+          ) : (
+            <img
+              key={`foe-${foe.uid}`}
+              className={`battle__sprite${foe.hp <= 0 ? " battle__sprite--down" : ""}`}
+              src={animatedUrl(foe.id) ?? staticUrl(foe.id)}
+              alt={foe.name}
+              onError={(e) => {
+                e.currentTarget.src = staticUrl(foe.id);
+              }}
+            />
+          )}
           {throwing && <span className="battle__ball" aria-hidden="true" />}
         </div>
 
@@ -91,12 +103,14 @@ export default function BattleView({ state, message, throwing }: Props) {
           />
         </div>
 
-        <div className="battle__plate battle__plate--foe">
-          <Plate mon={foe} own={false} />
-          {state.kind === "sauvage" && (
-            <span className="battle__wild">{species(foe.id).genus}</span>
-          )}
-        </div>
+        {!trainerSprite && (
+          <div className="battle__plate battle__plate--foe">
+            <Plate mon={foe} own={false} />
+            {state.kind === "sauvage" && (
+              <span className="battle__wild">{species(foe.id).genus}</span>
+            )}
+          </div>
+        )}
         <div className="battle__plate battle__plate--mine">
           <Plate mon={mine} own />
         </div>

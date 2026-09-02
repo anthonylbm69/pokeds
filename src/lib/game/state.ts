@@ -17,6 +17,13 @@ export type GameState = {
   balls: number;
   potions: number;
   money: number;
+  /** Vélo acheté chez Cycles Maillard, et selle occupée ou non. */
+  bike: boolean;
+  riding: boolean;
+  /** Musique de fond activée. */
+  music: boolean;
+  /** Starter reçu : l'Arène s'en sert pour composer son équipe. */
+  starter?: number;
   /** Événements franchis : starter reçu, dresseurs battus… */
   flags: string[];
   /** Le Pokédex de la partie, distinct de celui de la console. */
@@ -27,6 +34,15 @@ export type GameState = {
 };
 
 export const STARTERS = [495, 498, 501];
+
+/** Le starter qui met celui du joueur en difficulté : Plante ← Feu ← Eau ← Plante. */
+export function counterStarter(starter: number | undefined): number {
+  if (starter === 495) return 498;
+  if (starter === 498) return 501;
+  return 495;
+}
+
+export const BIKE_PRICE = 2000;
 
 const SAVE_KEY = "pokeds:partie";
 
@@ -42,6 +58,9 @@ export function newGame(name: string): GameState {
     balls: 5,
     potions: 3,
     money: 3000,
+    bike: false,
+    riding: false,
+    music: true,
     flags: [],
     seen: [],
     caught: [],
@@ -54,6 +73,7 @@ export function giveStarter(state: GameState, id: number): GameState {
   return {
     ...state,
     party: [mon],
+    starter: id,
     flags: [...state.flags, "starter"],
     seen: [...new Set([...state.seen, id])],
     caught: [...new Set([...state.caught, id])],
@@ -96,9 +116,14 @@ export function loadGame(): GameState | null {
     if (!raw) return null;
     const data = JSON.parse(raw) as GameState;
     if (data?.version !== 1 || !Array.isArray(data.party)) return null;
-    // Une sauvegarde éditée à la main ne doit pas dépasser les PV maximum.
+    // Une sauvegarde éditée à la main ne doit pas dépasser les PV maximum, et
+    // une partie plus ancienne ignore les champs ajoutés depuis.
     return {
       ...data,
+      bike: data.bike ?? false,
+      riding: false,
+      music: data.music ?? true,
+      starter: data.starter ?? data.party[0]?.id,
       party: data.party.map((mon) => ({
         ...mon,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),

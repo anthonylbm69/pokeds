@@ -1769,6 +1769,22 @@ body::before {
   animation: enterMine 0.4s ease-out;
 }
 
+/* Le dresseur adverse, le temps de sa réplique d'ouverture. */
+.battle__trainer-sprite {
+  position: relative;
+  height: 150px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 8px rgba(15, 58, 88, 0.4));
+  animation: enterTrainer 0.4s ease-out;
+}
+
+@keyframes enterTrainer {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+}
+
 .battle__sprite--down {
   opacity: 0;
   transform: scale(2) translateY(30px);
@@ -1925,7 +1941,7 @@ body::before {
 .battle__trainer {
   position: absolute;
   right: 14px;
-  top: 84px;
+  top: 16px;
   display: flex;
   align-items: center;
   gap: 8px;

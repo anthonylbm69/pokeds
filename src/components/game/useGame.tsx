@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
+import { TRACKS, music, type TrackId } from "@/lib/game/music";
 import { MOVES, TYPE_FR, species } from "@/lib/game/data";
 import {
   activeMon,
@@ -27,8 +28,10 @@ import {
   type NpcSpec,
 } from "@/lib/game/world";
 import {
+  BIKE_PRICE,
   STARTERS,
   addCaught,
+  counterStarter,
   giveStarter,
   hasFlag,
   healParty,
@@ -58,7 +61,7 @@ type Then =
   | { do: "starter" }
   | { do: "heal"; respawn: boolean }
   | { do: "trainer"; npc: string }
-  | { do: "shop" }
+  | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
 
 type BattleUi = {
@@ -66,8 +69,12 @@ type BattleUi = {
   queue: string[];
   view: "message" | "menu" | "moves" | "bag" | "party";
   throwing: boolean;
+  /** Le dresseur est encore en scène, avant son premier Pokémon. */
+  showTrainer: boolean;
   origin: { kind: "sauvage" } | { kind: "dresseur"; npc: string };
 };
+
+type Counter = "boutique" | "velo";
 
 type Phase =
   | { kind: "intro"; step: number }
@@ -75,14 +82,17 @@ type Phase =
   | { kind: "world" }
   | { kind: "text"; lines: string[]; i: number; then: Then | null }
   | { kind: "starter" }
-  | { kind: "shop"; message: string | null }
+  | { kind: "shop"; counter: Counter; message: string | null }
   | { kind: "battle"; ui: BattleUi };
 
-/** Le rayon de la Boutique, aux prix d'Unys. */
-const STOCK = [
-  { id: "ball", label: "POKÉ BALL", price: 200, note: "Pour capturer un Pokémon sauvage." },
-  { id: "potion", label: "POTION", price: 300, note: "Rend 20 PV à un Pokémon." },
-] as const;
+/** Les rayons, aux prix d'Unys. */
+const STOCK: Record<Counter, { id: string; label: string; price: number }[]> = {
+  boutique: [
+    { id: "ball", label: "POKÉ BALL", price: 200 },
+    { id: "potion", label: "POTION", price: 300 },
+  ],
+  velo: [{ id: "bike", label: "VÉLO", price: BIKE_PRICE }],
+};
 
 const INTRO = [
   "Bonjour ! Bienvenue dans le monde des POKéMON !",
@@ -201,7 +211,23 @@ export function useGame({
         return;
       }
       if (npc.shop) {
-        setPhase({ kind: "text", lines: npc.lines, i: 0, then: { do: "shop" } });
+        setPhase({
+          kind: "text",
+          lines: npc.lines,
+          i: 0,
+          then: { do: "shop", counter: "boutique" },
+        });
+        return;
+      }
+      if (npc.bike) {
+        setPhase({
+          kind: "text",
+          lines: game.bike
+            ? ["Alors, ce vélo ? Rien de tel pour avaler les routes !"]
+            : npc.lines,
+          i: 0,
+          then: game.bike ? null : { do: "shop", counter: "velo" },
+        });
         return;
       }
       setPhase({ kind: "text", lines: npc.lines, i: 0, then: null });
@@ -218,7 +244,14 @@ export function useGame({
       playCry(state.foe.id);
       setPhase({
         kind: "battle",
-        ui: { state, queue, view: "message", throwing: false, origin },
+        ui: {
+          state,
+          queue,
+          view: "message",
+          throwing: false,
+          showTrainer: origin.kind === "dresseur",
+          origin,
+        },
       });
     },
     [playCry],
@@ -242,6 +275,11 @@ export function useGame({
       const npc = npcById(npcId);
       if (!npc?.trainer) return;
       const team = npc.trainer.team.map((t) => createMon(t.id, t.level));
+      // À l'Arène, l'as de la Championne répond au starter du joueur.
+      if (npc.trainer.mirror && team.length) {
+        const last = team[team.length - 1];
+        team[team.length - 1] = createMon(counterStarter(game.starter), last.level);
+      }
       const state = startTrainer(game.party, team, {
         name: npc.trainer.name,
         title: npc.trainer.title,
@@ -282,11 +320,16 @@ export function useGame({
         }
       }
 
+      if (s.outcome === "victoire") music.play("victoire");
+
       if (s.outcome === "victoire" && ui.origin.kind === "dresseur") {
         const npc = npcById(ui.origin.npc);
         next = withFlag(next, `battu:${ui.origin.npc}`);
         next = { ...next, money: next.money + (s.trainer?.reward ?? 0) };
-        if (npc?.trainer) lines.push(...npc.trainer.defeat, ...npc.trainer.after);
+        if (npc?.trainer) {
+          lines.push(...npc.trainer.defeat, ...npc.trainer.after);
+          if (npc.trainer.badge) next = withFlag(next, `insigne:${npc.trainer.badge}`);
+        }
       }
 
       if (s.outcome === "defaite") {
@@ -324,7 +367,11 @@ export function useGame({
     (ui: BattleUi) => {
       const queue = ui.queue.slice(1);
       if (queue.length) {
-        setPhase({ kind: "battle", ui: { ...ui, queue, throwing: false } });
+        // Le dresseur s'efface dès sa réplique lue : son Pokémon entre.
+        setPhase({
+          kind: "battle",
+          ui: { ...ui, queue, throwing: false, showTrainer: false },
+        });
         return;
       }
       if (ui.state.outcome !== "en-cours") {
@@ -359,7 +406,15 @@ export function useGame({
 
       const warp = warpAt(current, x, y);
       if (warp) {
-        const moved: GameState = { ...game, map: warp.to, x: warp.tx, y: warp.ty, dir: warp.dir ?? game.dir };
+        const moved: GameState = {
+          ...game,
+          map: warp.to,
+          x: warp.tx,
+          y: warp.ty,
+          dir: warp.dir ?? game.dir,
+          // On met pied à terre en franchissant une porte.
+          riding: game.riding && !MAPS[warp.to].indoor,
+        };
         player.current = newPlayer(warp.tx, warp.ty, warp.dir ?? game.dir);
         setGame(moved);
         saveGame(moved);
@@ -440,6 +495,7 @@ export function useGame({
           startTrainerBattle(then.npc);
           break;
         case "heal": {
+          music.play("soin");
           const healed = healParty(game);
           const next = then.respawn
             ? { ...healed, respawn: { map: game.map, x: player.current.x, y: player.current.y } }
@@ -456,7 +512,7 @@ export function useGame({
         }
         case "shop":
           setCursor(0);
-          setPhase({ kind: "shop", message: null });
+          setPhase({ kind: "shop", counter: then.counter, message: null });
           break;
         default:
           setPhase({ kind: "world" });
@@ -465,30 +521,55 @@ export function useGame({
     [game, startTrainerBattle],
   );
 
-  /** Achat d'un article : la boutique reste ouverte pour enchaîner. */
+  /** Achat d'un article : le comptoir reste ouvert pour enchaîner. */
   const buy = useCallback(
-    (index: number) => {
-      const item = STOCK[index];
+    (counter: Counter, index: number) => {
+      const item = STOCK[counter][index];
       if (!item) return;
       if (game.money < item.price) {
-        setPhase({ kind: "shop", message: "Vous n'avez pas assez d'argent…" });
+        setPhase({ kind: "shop", counter, message: "Vous n'avez pas assez d'argent…" });
         return;
       }
+      if (item.id === "bike" && game.bike) {
+        setPhase({ kind: "shop", counter, message: "Vous en avez déjà un !" });
+        return;
+      }
+
       const next: GameState = {
         ...game,
         money: game.money - item.price,
         balls: game.balls + (item.id === "ball" ? 1 : 0),
         potions: game.potions + (item.id === "potion" ? 1 : 0),
+        bike: game.bike || item.id === "bike",
       };
       setGame(next);
       saveGame({ ...next, x: player.current.x, y: player.current.y, dir: player.current.dir });
       setPhase({
         kind: "shop",
-        message: `Et voilà une ${item.label.toLowerCase()} ! Merci de votre visite.`,
+        counter,
+        message:
+          item.id === "bike"
+            ? "Et voilà votre vélo ! Appuyez sur L pour monter en selle."
+            : `Et voilà une ${item.label.toLowerCase()} ! Merci de votre visite.`,
       });
     },
     [game],
   );
+
+  /** Monter ou descendre du vélo : impossible à l'intérieur. */
+  const toggleBike = useCallback(() => {
+    if (!game.bike) return;
+    if (!game.riding && MAPS[game.map].indoor) {
+      setPhase({
+        kind: "text",
+        lines: ["Pas de vélo à l'intérieur !"],
+        i: 0,
+        then: null,
+      });
+      return;
+    }
+    setGame((g) => ({ ...g, riding: !g.riding }));
+  }, [game]);
 
   const chooseStarter = useCallback(
     (index: number) => {
@@ -594,16 +675,24 @@ export function useGame({
     }
 
     if (phase.kind === "shop") {
+      const owned = (id: string) =>
+        id === "ball"
+          ? `vous en avez ${game.balls}`
+          : id === "potion"
+            ? `vous en avez ${game.potions}`
+            : game.bike
+              ? "déjà en selle"
+              : "un seul suffit";
       return {
-        title: "Boutique",
+        title: phase.counter === "velo" ? "Cycles Maillard" : "Boutique",
         hint: "▲ ▼ pour choisir · A pour acheter · B pour sortir",
         layout: "list",
         list: [
-          ...STOCK.map((item) => ({
+          ...STOCK[phase.counter].map((item) => ({
             id: item.id,
             label: item.label,
-            sub: `${item.price} P — vous en avez ${item.id === "ball" ? game.balls : game.potions}`,
-            disabled: game.money < item.price,
+            sub: `${item.price} P — ${owned(item.id)}`,
+            disabled: game.money < item.price || (item.id === "bike" && game.bike),
             tone: "bag" as const,
           })),
           { id: "leave", label: "SORTIR", tone: "back" as const },
@@ -631,11 +720,14 @@ export function useGame({
 
     return {
       title: MAPS[game.map].name,
-      hint: "Croix pour marcher · B pour courir · A pour interagir",
+      hint: game.bike
+        ? `Croix pour marcher · B pour courir · L pour ${game.riding ? "descendre du" : "monter à"} vélo · A pour interagir`
+        : "Croix pour marcher · B pour courir · A pour interagir",
       layout: "row",
       list: [
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
+        { id: "music", label: "MUSIQUE", sub: game.music ? "activée" : "coupée" },
         { id: "title", label: "TITRE", sub: "SELECT" },
       ],
     };
@@ -673,7 +765,7 @@ export function useGame({
           return;
         }
         // `buy` répond lui-même quand la bourse est trop légère.
-        buy(index);
+        buy(phase.counter, index);
         return;
       }
       if (!choice || choice.disabled) return;
@@ -727,6 +819,7 @@ export function useGame({
       if (phase.kind === "world") {
         if (choice.id === "dex") onOpenDex();
         else if (choice.id === "save") save();
+        else if (choice.id === "music") setGame((g) => ({ ...g, music: !g.music }));
         else if (choice.id === "title") onExit();
       }
     },
@@ -808,12 +901,35 @@ export function useGame({
           if (button === "a") interact();
           else if (button === "x") save();
           else if (button === "y") onOpenDex();
+          else if (button === "l" || button === "r") toggleBike();
           else if (button === "select") onExit();
           return;
       }
     },
-    [active, phase, cursor, pick, moveCursor, advanceBattle, interact, save, onOpenDex, onExit, resolveThen],
+    [active, phase, cursor, pick, moveCursor, advanceBattle, interact, save, toggleBike, onOpenDex, onExit, resolveThen],
   );
+
+  /* ---------------------------------------------------------- musique */
+
+  const track: TrackId = useMemo(() => {
+    if (phase.kind === "battle") {
+      return phase.ui.origin.kind === "dresseur" ? "dresseur" : "combat";
+    }
+    if (game.map === "arene") return "dresseur";
+    return game.map.startsWith("route") ? "route" : "ville";
+  }, [phase, game.map]);
+
+  useEffect(() => {
+    if (!active) {
+      music.stop();
+      return;
+    }
+    music.setMuted(!game.music);
+    // Un jingle a la priorité : il rendra la main tout seul.
+    const playing = music.playing;
+    if (playing && !TRACKS[playing].loop) return;
+    music.play(track);
+  }, [active, track, game.music]);
 
   /* ------------------------------------------------------------ rendu */
 
@@ -851,11 +967,16 @@ export function useGame({
     }
 
     if (phase.kind === "battle") {
+      const foeTrainer =
+        phase.ui.showTrainer && phase.ui.origin.kind === "dresseur"
+          ? (npcById(phase.ui.origin.npc)?.sprite ?? null)
+          : null;
       return (
         <BattleView
           state={phase.ui.state}
           message={phase.ui.queue[0] ?? null}
           throwing={phase.ui.throwing}
+          trainerSprite={foeTrainer}
         />
       );
     }
@@ -868,6 +989,7 @@ export function useGame({
           player={player}
           held={held}
           paused={phase.kind !== "world"}
+          riding={game.riding}
           onStep={onStep}
         />
         <span className="scene__zone">{MAPS[game.map].name}</span>

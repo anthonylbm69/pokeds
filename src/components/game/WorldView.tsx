@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { TILE, drawCharacter, drawTile, variantFor } from "@/lib/game/sprites";
+import { TILE, drawBike, drawCharacter, drawTile, variantFor } from "@/lib/game/sprites";
 import {
   MAPS,
   STEP,
@@ -37,6 +37,8 @@ type Props = {
   player: React.RefObject<PlayerPos>;
   held: React.RefObject<ReadonlySet<DsButton>>;
   paused: boolean;
+  /** En selle : deux fois plus rapide qu'à pied, et le vélo se dessine. */
+  riding: boolean;
   onStep: (x: number, y: number) => void;
 };
 
@@ -44,6 +46,7 @@ const VIEW_W = 512;
 const VIEW_H = 384;
 const WALK_MS = 210;
 const RUN_MS = 120;
+const BIKE_MS = 95;
 const TURN_MS = 80;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
@@ -55,14 +58,15 @@ export default function WorldView({
   player,
   held,
   paused,
+  riding,
   onStep,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // La boucle d'animation lit toujours les dernières valeurs sans redémarrer.
-  const latest = useRef({ mapId, npcs, paused, onStep });
+  const latest = useRef({ mapId, npcs, paused, riding, onStep });
   useEffect(() => {
-    latest.current = { mapId, npcs, paused, onStep };
+    latest.current = { mapId, npcs, paused, riding, onStep };
   });
 
   useEffect(() => {
@@ -82,8 +86,14 @@ export default function WorldView({
       const map = MAPS[latest.current.mapId];
       const buttons = held.current ?? new Set<DsButton>();
 
+      const pace = latest.current.riding
+        ? BIKE_MS
+        : buttons.has("b")
+          ? RUN_MS
+          : WALK_MS;
+
       if (p.moving) {
-        p.progress += dt / (buttons.has("b") ? RUN_MS : WALK_MS);
+        p.progress += dt / pace;
         if (p.progress < 1) return;
         const { dx, dy } = STEP[p.dir];
         p.x += dx;
@@ -181,7 +191,10 @@ export default function WorldView({
       }
       actors.push({
         y: p.y,
-        paint: () => drawCharacter(ctx, "joueur", p.dir, p.frame, px - camX, py - camY),
+        paint: () => {
+          if (latest.current.riding) drawBike(ctx, px - camX, py - camY);
+          drawCharacter(ctx, "joueur", p.dir, p.frame, px - camX, py - camY);
+        },
       });
       actors.sort((a, b) => a.y - b.y).forEach((a) => a.paint());
 
