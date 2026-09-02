@@ -1,4 +1,4 @@
-import Pokedex from "@/components/Pokedex";
+import Console from "@/components/Console";
 import { fetchIndex, type IndexEntry } from "@/lib/pokeapi";
 
 // L'index change au rythme des nouvelles générations : une révision par semaine suffit.
@@ -14,7 +14,7 @@ export default async function Home() {
 
   return (
     <main className="page">
-      <Pokedex index={index} />
+      <Console index={index} />
       <p className="page__credit">
         Glissez la coque pour la déplacer · molette pour zoomer · double-clic
         pour recentrer — données &amp; sprites :{" "}

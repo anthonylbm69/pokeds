@@ -67,7 +67,15 @@ export const animatedUrl = (id: number) =>
     ? `${SPRITES}/versions/generation-v/black-white/animated/${id}.gif`
     : null;
 
+/** Sprite animé de dos, celui du Pokémon du joueur pendant un combat. */
+export const animatedBackUrl = (id: number) =>
+  id <= 649
+    ? `${SPRITES}/versions/generation-v/black-white/animated/back/${id}.gif`
+    : null;
+
 export const staticUrl = (id: number) => `${SPRITES}/${id}.png`;
+
+export const staticBackUrl = (id: number) => `${SPRITES}/back/${id}.png`;
 
 export const artworkUrl = (id: number) =>
   `${SPRITES}/other/official-artwork/${id}.png`;

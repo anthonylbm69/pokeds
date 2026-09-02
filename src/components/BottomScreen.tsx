@@ -26,6 +26,7 @@ type Props = {
   onSound: () => void;
   searchRef: React.RefObject<HTMLInputElement | null>;
   hasCry: boolean;
+  onExit: () => void;
 };
 
 const TABS: { id: DexTab; label: string }[] = [
@@ -62,6 +63,7 @@ export default function BottomScreen({
   onSound,
   searchRef,
   hasCry,
+  onExit,
 }: Props) {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -76,6 +78,15 @@ export default function BottomScreen({
   return (
     <div className="touch">
       <div className="touch__search">
+        <button
+          type="button"
+          className="touch__back"
+          onClick={onExit}
+          title="Revenir au menu (B)"
+          aria-label="Revenir au menu"
+        >
+          ◀
+        </button>
         <span className="touch__icon" aria-hidden="true">
           ⌕
         </span>

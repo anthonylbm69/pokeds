@@ -12,19 +12,18 @@ import {
 } from "@/lib/pokeapi";
 import TopScreen, { type DexTab } from "./TopScreen";
 import BottomScreen from "./BottomScreen";
-import DSConsole, { type DsButton } from "./DSConsole";
-import { BootBottom, BootTop, useBoot } from "./BootSequence";
+import type { DsButton, ModeParts } from "./DSConsole";
 
 const TAB_ORDER: DexTab[] = ["info", "stats", "evo"];
 
-/** Ce que fait chaque bouton : repris en info-bulle sur la coque. */
-const BUTTON_LABELS: Partial<Record<DsButton, string>> = {
+/** Ce que fait chaque bouton dans le Pokédex : repris en info-bulle. */
+export const DEX_LABELS: Partial<Record<DsButton, string>> = {
   up: "Pokémon précédent",
   down: "Pokémon suivant",
   left: "Onglet précédent",
   right: "Onglet suivant",
   a: "Écouter le cri",
-  b: "Effacer la recherche",
+  b: "Effacer / revenir",
   x: "Couper le son",
   y: "Pokémon au hasard",
   l: "Reculer de 10",
@@ -33,7 +32,16 @@ const BUTTON_LABELS: Partial<Record<DsButton, string>> = {
   select: "Changer de génération",
 };
 
-export default function Pokedex({ index: initialIndex }: { index: IndexEntry[] }) {
+/** Le mode Pokédex de la console : les deux écrans et ses commandes. */
+export function usePokedex({
+  index: initialIndex,
+  active,
+  onExit,
+}: {
+  index: IndexEntry[];
+  active: boolean;
+  onExit: () => void;
+}): ModeParts {
   const [index, setIndex] = useState(initialIndex);
   const [selectedId, setSelectedId] = useState(1);
   const [detail, setDetail] = useState<PokemonDetail | null>(null);
@@ -44,7 +52,6 @@ export default function Pokedex({ index: initialIndex }: { index: IndexEntry[] }
   const [tab, setTab] = useState<DexTab>("info");
   const [sound, setSound] = useState(true);
 
-  const boot = useBoot();
   const cache = useRef(new Map<number, PokemonDetail>());
   const searchRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -141,19 +148,15 @@ export default function Pokedex({ index: initialIndex }: { index: IndexEntry[] }
   // Le cri accompagne chaque nouvelle fiche, comme dans le jeu.
   const lastCried = useRef<number | null>(null);
   useEffect(() => {
-    if (boot.booting || !detail || pending) return;
+    if (!active || !detail || pending) return;
     if (lastCried.current === detail.id) return;
     lastCried.current = detail.id;
     playCry(detail.cry);
-  }, [boot.booting, detail, pending, playCry]);
+  }, [active, detail, pending, playCry]);
 
-  /** Traduction d'un appui en action du Pokédex. */
   const press = useCallback(
     (button: DsButton) => {
-      if (boot.booting) {
-        boot.press();
-        return;
-      }
+      if (!active) return;
 
       switch (button) {
         case "up":
@@ -185,17 +188,20 @@ export default function Pokedex({ index: initialIndex }: { index: IndexEntry[] }
           break;
         }
         case "b":
-          setQuery("");
-          searchRef.current?.blur();
+          // B efface la recherche ; s'il n'y a rien à effacer, on ressort.
+          if (query) {
+            setQuery("");
+            searchRef.current?.blur();
+          } else {
+            onExit();
+          }
           break;
         case "x":
           setSound((s) => !s);
           break;
         case "y":
           if (entries.length) {
-            setSelectedId(
-              entries[Math.floor(Math.random() * entries.length)].id,
-            );
+            setSelectedId(entries[Math.floor(Math.random() * entries.length)].id);
           }
           break;
         case "start":
@@ -210,50 +216,39 @@ export default function Pokedex({ index: initialIndex }: { index: IndexEntry[] }
           break;
       }
     },
-    [boot, step, shiftTab, entries, detail, playCry],
+    [active, step, shiftTab, entries, detail, query, playCry, onExit],
   );
 
-  return (
-    <DSConsole
-      onPress={press}
-      labels={BUTTON_LABELS}
-      count={`${entries.length} / ${index.length || "…"}`}
-      flash={boot.phase === "flash"}
-      top={
-        boot.booting ? (
-          <BootTop phase={boot.phase} onPress={boot.press} />
-        ) : (
-          <TopScreen
-            detail={detail}
-            pending={pending}
-            error={error}
-            tab={tab}
-            onSelect={setSelectedId}
-          />
-        )
-      }
-      bottom={
-        boot.booting ? (
-          <BootBottom phase={boot.phase} onPress={boot.press} />
-        ) : (
-          <BottomScreen
-            entries={entries}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            query={query}
-            onQuery={setQuery}
-            gen={gen}
-            onGen={setGen}
-            tab={tab}
-            onTab={setTab}
-            onCry={() => playCry(detail?.cry ?? null)}
-            sound={sound}
-            onSound={() => setSound((s) => !s)}
-            searchRef={searchRef}
-            hasCry={Boolean(detail?.cry)}
-          />
-        )
-      }
-    />
-  );
+  return {
+    press,
+    count: `${entries.length} / ${index.length || "…"}`,
+    top: (
+      <TopScreen
+        detail={detail}
+        pending={pending}
+        error={error}
+        tab={tab}
+        onSelect={setSelectedId}
+      />
+    ),
+    bottom: (
+      <BottomScreen
+        entries={entries}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        query={query}
+        onQuery={setQuery}
+        gen={gen}
+        onGen={setGen}
+        tab={tab}
+        onTab={setTab}
+        onCry={() => playCry(detail?.cry ?? null)}
+        sound={sound}
+        onSound={() => setSound((s) => !s)}
+        searchRef={searchRef}
+        hasCry={Boolean(detail?.cry)}
+        onExit={onExit}
+      />
+    ),
+  };
 }

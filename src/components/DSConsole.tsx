@@ -17,6 +17,17 @@ export type DsButton =
   | "start"
   | "select";
 
+/**
+ * Ce que fournit un « mode » de la console (Pokédex, jeu…) : le contenu des
+ * deux dalles, la réaction aux boutons et le petit compteur de la coque.
+ */
+export type ModeParts = {
+  top: React.ReactNode;
+  bottom: React.ReactNode;
+  press: (button: DsButton) => void;
+  count?: string;
+};
+
 type Props = {
   top: React.ReactNode;
   bottom: React.ReactNode;
@@ -27,6 +38,8 @@ type Props = {
   count?: string;
   /** Éclair blanc sur les deux dalles, au lancement du jeu. */
   flash?: boolean;
+  /** Boutons maintenus : le jeu s'en sert pour faire marcher le héros. */
+  onHold?: (buttons: ReadonlySet<DsButton>) => void;
 };
 
 /** Ces boutons se répètent tant qu'on les maintient, comme sur la console. */
@@ -68,6 +81,7 @@ export default function DSConsole({
   labels = {},
   count,
   flash = false,
+  onHold,
 }: Props) {
   const shell = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<number | null>(null);
@@ -239,6 +253,15 @@ export default function DSConsole({
       window.removeEventListener("blur", clear);
     };
   }, []);
+
+  // Les boutons maintenus sont republiés à chaque changement : le jeu s'en
+  // sert pour la marche continue, là où un simple appui ne suffirait pas.
+  useEffect(() => {
+    if (!onHold) return;
+    const all = new Set(keyed);
+    if (held) all.add(held);
+    onHold(all);
+  }, [held, keyed, onHold]);
 
   const key = (id: DsButton, className: string, face: string) => (
     <button

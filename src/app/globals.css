@@ -1506,6 +1506,731 @@ body::before {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
+/* ===================================================== menu de l'écran-titre */
+
+/* Zone de clic qui saute l'intro, sous le contenu. */
+.bios__skip {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: pointer;
+  background: none;
+}
+
+.bios__menu {
+  position: absolute;
+  bottom: 6%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  animation: fadeIn 0.5s ease-out 0.5s both;
+}
+
+.bios__entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 22px 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #b9c9da;
+  text-shadow: 0 2px 0 #05070c;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.bios__entry:hover {
+  color: #fff;
+}
+
+.bios__entry--on {
+  color: #fff;
+  background: rgba(120, 180, 240, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(160, 210, 255, 0.4);
+}
+
+.bios__cursor {
+  font-size: 9px;
+  opacity: 0;
+  color: var(--warm);
+}
+
+.bios__entry--on .bios__cursor {
+  opacity: 1;
+  animation: nudge 0.8s ease-in-out infinite alternate;
+}
+
+/* ============================================================ le monde */
+
+.scene {
+  position: absolute;
+  inset: 0;
+  background: #0a0c10;
+}
+
+.world {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* Bandeau du nom de zone, comme à l'entrée d'une route. */
+.scene__zone {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 4px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f4f8fb;
+  background: rgba(12, 22, 38, 0.82);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.75);
+  animation: zoneIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes zoneIn {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+/* Boîte de dialogue : le cadre blanc à double bordure des jeux. */
+.scene__box,
+.battle__text {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  min-height: 86px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: #18222e;
+  background: #f6fafc;
+  box-shadow:
+    inset 0 0 0 3px #2c4a72,
+    inset 0 0 0 6px #f6fafc,
+    0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.scene__next,
+.battle__next,
+.intro__next {
+  position: absolute;
+  right: 16px;
+  bottom: 10px;
+  font-size: 13px;
+  color: var(--accent-deep);
+  animation: bob 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes bob {
+  to {
+    transform: translateY(3px);
+  }
+}
+
+/* -------------------------------------------------------- l'introduction */
+
+.intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: radial-gradient(120% 90% at 50% 30%, #1b2740, #070a10 75%);
+}
+
+.intro__mon {
+  height: 92px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 26px rgba(150, 190, 255, 0.45));
+  animation: hover 4s ease-in-out infinite alternate;
+}
+
+.intro__box {
+  position: relative;
+  width: 440px;
+  min-height: 96px;
+  padding: 12px 18px 16px;
+  border-radius: 8px;
+  background: #f6fafc;
+  box-shadow:
+    inset 0 0 0 3px #2c4a72,
+    inset 0 0 0 6px #f6fafc,
+    0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.intro__who {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--accent-deep);
+  margin-bottom: 4px;
+}
+
+.intro__line {
+  font-size: 15px;
+  line-height: 1.45;
+  color: #18222e;
+}
+
+/* ============================================================ le combat */
+
+.battle {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    #bfe6f7 0%,
+    #dcf1ec 52%,
+    #9ed07e 52%,
+    #7cb85f 100%
+  );
+}
+
+.battle__field {
+  position: absolute;
+  inset: 0 0 96px 0;
+}
+
+.battle__slot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.battle__slot--foe {
+  right: 54px;
+  top: 46px;
+}
+
+.battle__slot--mine {
+  left: 62px;
+  bottom: 2px;
+}
+
+/* Le socle d'herbe sous chaque combattant. */
+.battle__pad {
+  position: absolute;
+  bottom: -8px;
+  width: 116px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(92, 148, 74, 0.9), rgba(92, 148, 74, 0) 72%);
+}
+
+.battle__slot--mine .battle__pad {
+  width: 148px;
+  height: 32px;
+}
+
+.battle__sprite {
+  position: relative;
+  image-rendering: pixelated;
+  transform: scale(2);
+  transform-origin: bottom center;
+  animation: enterFoe 0.4s ease-out;
+}
+
+.battle__sprite--back {
+  transform: scale(2.2);
+  animation: enterMine 0.4s ease-out;
+}
+
+.battle__sprite--down {
+  opacity: 0;
+  transform: scale(2) translateY(30px);
+  transition: all 0.4s ease-in;
+}
+
+@keyframes enterFoe {
+  from {
+    opacity: 0;
+    transform: scale(2) translateX(40px);
+  }
+}
+
+@keyframes enterMine {
+  from {
+    opacity: 0;
+    transform: scale(2.2) translateX(-40px);
+  }
+}
+
+/* La Poké Ball qui part vers l'adversaire. */
+.battle__ball {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #e24b42 0 46%, #f4f6f8 46% 100%);
+  box-shadow: inset 0 0 0 2px #1b1f26, 0 2px 4px rgba(0, 0, 0, 0.4);
+  animation: ballThrow 0.7s cubic-bezier(0.3, -0.4, 0.6, 1) both;
+}
+
+@keyframes ballThrow {
+  from {
+    transform: translate(-190px, 130px) rotate(0deg);
+  }
+  to {
+    transform: translate(-8px, -10px) rotate(720deg);
+  }
+}
+
+.battle__plate {
+  position: absolute;
+}
+
+.battle__plate--foe {
+  left: 14px;
+  top: 14px;
+}
+
+.battle__plate--mine {
+  right: 14px;
+  bottom: 10px;
+}
+
+.plate {
+  min-width: 208px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: rgba(246, 250, 252, 0.94);
+  box-shadow:
+    inset 0 0 0 2px #2c4a72,
+    0 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+.plate__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plate__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #18222e;
+}
+
+.plate__lvl {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.plate__tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #d9a400;
+}
+
+.plate__hp {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #18222e;
+}
+
+.hpbar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #4a5a68;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.hpbar--small {
+  height: 6px;
+}
+
+.hpbar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.hpbar__fill--high { background: linear-gradient(180deg, #7ce08a, #3fae56); }
+.hpbar__fill--mid { background: linear-gradient(180deg, #f5d35c, #d9a400); }
+.hpbar__fill--low { background: linear-gradient(180deg, #f08076, #d63c2f); }
+
+.expbar {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #4a5a68;
+  overflow: hidden;
+}
+
+.expbar__fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, #7fd4f5, #2fa3d6);
+  transition: width 0.45s ease;
+}
+
+.battle__wild {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f6fafc;
+  background: rgba(20, 34, 54, 0.78);
+}
+
+.battle__trainer {
+  position: absolute;
+  right: 14px;
+  top: 84px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #f6fafc;
+  background: rgba(20, 34, 54, 0.8);
+}
+
+.battle__balls {
+  color: #f2a03c;
+  letter-spacing: 0.14em;
+}
+
+.battle__text {
+  display: flex;
+  align-items: center;
+}
+
+.battle__prompt {
+  color: var(--ink-soft);
+}
+
+.battle__prompt strong {
+  color: #18222e;
+}
+
+/* ================================================== écran tactile du jeu */
+
+.pad {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.pad__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pad__title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-deep);
+}
+
+.pad__wallet {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.pad__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pad__empty {
+  padding: 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.pad__party {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.monc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.monc--current {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.monc--ko {
+  opacity: 0.5;
+}
+
+.monc__icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.monc__info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+}
+
+.monc__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.monc__lvl {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+
+.monc__info .hpbar {
+  grid-column: 1 / -1;
+}
+
+.monc__hp {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+
+/* -------------------------------------------------------- les commandes */
+
+.pad__choices {
+  display: grid;
+  gap: 6px;
+}
+
+.pad__choices--grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.pad__choices--list {
+  grid-template-columns: 1fr;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.pad__choices--row {
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.cmd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--line);
+  transition: all 0.12s ease;
+}
+
+.cmd:hover:not(:disabled) {
+  background: #eaf3f8;
+}
+
+.cmd:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cmd--on {
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 5px rgba(15, 58, 88, 0.35);
+}
+
+.cmd--on:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+}
+
+.cmd--fight { box-shadow: inset 0 0 0 2px #e08a7a; }
+.cmd--bag { box-shadow: inset 0 0 0 2px #e0c07a; }
+.cmd--party { box-shadow: inset 0 0 0 2px #8fc98a; }
+.cmd--run { box-shadow: inset 0 0 0 2px #9fb4c9; }
+.cmd--back { box-shadow: inset 0 0 0 2px var(--line); }
+
+.cmd--on.cmd--fight,
+.cmd--on.cmd--bag,
+.cmd--on.cmd--party,
+.cmd--on.cmd--run,
+.cmd--on.cmd--back {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 5px rgba(15, 58, 88, 0.35);
+}
+
+.cmd__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.cmd__sub {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.pad__hint {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------- nom et choix du starter */
+
+.pad__name {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 12px;
+  text-align: center;
+}
+
+.pad__name label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.pad__input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  outline: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: center;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+
+.pad__input:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.pad__starters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.starter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--line);
+  transition: all 0.14s ease;
+}
+
+.starter img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.starter--on {
+  background: linear-gradient(180deg, #eaf6fc, #d5ecf7);
+  box-shadow: inset 0 0 0 2px var(--accent), 0 4px 10px rgba(15, 58, 88, 0.25);
+  transform: translateY(-2px);
+}
+
+.starter__name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.starter__type {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+
+/* Retour au menu depuis le Pokédex. */
+.touch__back {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 10px;
+  color: var(--accent-deep);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+
+.touch__back:hover {
+  background: #fff;
+}
+
 /* ------------------------------------------------------------ divers */
 
 button {

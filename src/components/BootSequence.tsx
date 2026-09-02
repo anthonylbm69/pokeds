@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { animatedUrl, NATIONAL_DEX_MAX, staticUrl } from "@/lib/pokeapi";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { animatedUrl, staticUrl } from "@/lib/pokeapi";
+import { hasSave } from "@/lib/game/state";
+import type { DsButton } from "./DSConsole";
 
 /**
  * Le démarrage de Noir/Blanc, dans l'ordre : allumage de la console, logo
  * GAME FREAK avec son étoile filante, écran de copyright, puis l'écran-titre
- * qui attend START. Chaque étape s'enchaîne toute seule et se saute au clic.
+ * et son menu. Chaque étape s'enchaîne toute seule et se saute au clic.
  */
 export type BootPhase =
   | "power"
@@ -16,11 +18,19 @@ export type BootPhase =
   | "flash"
   | "done";
 
+export type TitleEntry = "continuer" | "nouvelle" | "dex";
+
+const LABELS: Record<TitleEntry, string> = {
+  continuer: "CONTINUER",
+  nouvelle: "NOUVELLE PARTIE",
+  dex: "POKÉDEX",
+};
+
 const STEPS: Partial<Record<BootPhase, { next: BootPhase; ms: number }>> = {
   power: { next: "gamefreak", ms: 1000 },
   gamefreak: { next: "copyright", ms: 2600 },
   copyright: { next: "title", ms: 2100 },
-  // "title" attend une pression ; "flash" couvre l'entrée dans le Pokédex.
+  // « title » attend un choix ; « flash » couvre l'entrée dans le jeu.
   flash: { next: "done", ms: 420 },
 };
 
@@ -28,8 +38,22 @@ const STEPS: Partial<Record<BootPhase, { next: BootPhase; ms: number }>> = {
 const LIGHT = 643;
 const DARK = 644;
 
-export function useBoot() {
+export function useBoot({ onChoose }: { onChoose: (entry: TitleEntry) => void }) {
   const [phase, setPhase] = useState<BootPhase>("power");
+  const [cursor, setCursor] = useState(0);
+
+  // La sauvegarde ne se lit que côté client : le serveur rend toujours un
+  // menu sans « CONTINUER », et le client l'ajoute au premier rendu.
+  const saved = useSyncExternalStore(
+    () => () => {},
+    () => hasSave(),
+    () => false,
+  );
+
+  const entries = useMemo<TitleEntry[]>(
+    () => (saved ? ["continuer", "nouvelle", "dex"] : ["nouvelle", "dex"]),
+    [saved],
+  );
 
   useEffect(() => {
     const step = STEPS[phase];
@@ -42,40 +66,75 @@ export function useBoot() {
     return () => window.clearTimeout(id);
   }, [phase]);
 
-  /** N'importe quelle commande saute l'intro ; sur le titre, elle lance le jeu. */
-  const press = useCallback(() => {
-    setPhase((p) => {
-      if (p === "flash" || p === "done") return p;
-      return p === "title" ? "flash" : "title";
-    });
+  const choose = useCallback(
+    (index: number) => {
+      const entry = entries[index];
+      if (!entry) return;
+      onChoose(entry);
+      setPhase("flash");
+    },
+    [entries, onChoose],
+  );
+
+  /** Toute commande saute l'intro ; sur le titre, elle pilote le menu. */
+  const press = useCallback(
+    (button: DsButton) => {
+      if (phase === "flash" || phase === "done") return;
+      if (phase !== "title") {
+        setPhase("title");
+        return;
+      }
+      if (button === "up") setCursor((c) => Math.max(0, c - 1));
+      else if (button === "down") setCursor((c) => Math.min(entries.length - 1, c + 1));
+      else if (button === "a" || button === "start") choose(cursor);
+    },
+    [phase, entries.length, cursor, choose],
+  );
+
+  /** Retour à l'écran-titre depuis un mode de la console. */
+  const goTitle = useCallback(() => {
+    setCursor(0);
+    setPhase("title");
   }, []);
 
   return {
     phase,
+    entries,
+    cursor,
     press,
-    /** Les dalles affichent encore l'intro : le Pokédex n'est pas monté. */
+    choose,
+    skip: () => setPhase("title"),
+    goTitle,
+    /** Les dalles affichent encore l'intro : aucun mode n'est monté. */
     booting: phase !== "flash" && phase !== "done",
   };
 }
 
-type Props = { phase: BootPhase; onPress: () => void };
+type Props = {
+  phase: BootPhase;
+  entries: TitleEntry[];
+  cursor: number;
+  onSkip: () => void;
+  onChoose: (index: number) => void;
+};
 
 const fallback = (id: number) => (e: React.SyntheticEvent<HTMLImageElement>) => {
   e.currentTarget.src = staticUrl(id);
 };
 
-/** Écran du haut : logo, copyright puis écran-titre. */
-export function BootTop({ phase, onPress }: Props) {
+/** Écran du haut : logo, copyright puis écran-titre et son menu. */
+export function BootTop({ phase, entries, cursor, onSkip, onChoose }: Props) {
   return (
-    <button
-      type="button"
-      key={phase}
-      className={`bios bios--${phase}`}
-      onClick={onPress}
-      aria-label={
-        phase === "title" ? "Démarrer le Pokédex" : "Passer l'introduction"
-      }
-    >
+    <div className={`bios bios--${phase}`} key={phase}>
+      {phase !== "title" && (
+        <button
+          type="button"
+          className="bios__skip"
+          onClick={onSkip}
+          aria-label="Passer l'introduction"
+        />
+      )}
+
       {phase === "power" && <span className="bios__crt" aria-hidden="true" />}
 
       {phase === "gamefreak" && (
@@ -118,35 +177,51 @@ export function BootTop({ phase, onPress }: Props) {
             <span className="bios__word">Pokédex</span>
             <span className="bios__ver">Version Noire &amp; Blanche</span>
           </span>
-          <span className="bios__press">APPUYEZ SUR START</span>
+          <ul className="bios__menu">
+            {entries.map((entry, i) => (
+              <li key={entry}>
+                <button
+                  type="button"
+                  className={`bios__entry${cursor === i ? " bios__entry--on" : ""}`}
+                  onClick={() => onChoose(i)}
+                >
+                  <span className="bios__cursor" aria-hidden="true">
+                    ▶
+                  </span>
+                  {LABELS[entry]}
+                </button>
+              </li>
+            ))}
+          </ul>
         </>
       )}
-    </button>
+    </div>
   );
 }
 
-/** Écran du bas : noir pendant l'intro, invite tactile sur le titre. */
-export function BootBottom({ phase, onPress }: Props) {
+/** Écran du bas : noir pendant l'intro, rappel des commandes sur le titre. */
+export function BootBottom({ phase, onSkip }: Pick<Props, "phase" | "onSkip">) {
   return (
-    <button
-      type="button"
-      key={phase}
-      className={`bios bios--${phase} bios--lower`}
-      onClick={onPress}
-      aria-label={
-        phase === "title" ? "Démarrer le Pokédex" : "Passer l'introduction"
-      }
-    >
+    <div className={`bios bios--${phase} bios--lower`} key={phase}>
+      {phase !== "title" && (
+        <button
+          type="button"
+          className="bios__skip"
+          onClick={onSkip}
+          aria-label="Passer l'introduction"
+        />
+      )}
+
       {phase === "power" && <span className="bios__crt" aria-hidden="true" />}
 
       {phase === "title" && (
         <>
-          <span className="bios__touch">◉ TOUCHEZ L&apos;ÉCRAN</span>
+          <span className="bios__touch">▲ ▼ POUR CHOISIR · A POUR VALIDER</span>
           <span className="bios__meta">
-            POKéDEX NATIONAL · {NATIONAL_DEX_MAX} ESPÈCES
+            UNE AVENTURE À UNYS · POKéDEX NATIONAL COMPLET
           </span>
         </>
       )}
-    </button>
+    </div>
   );
 }
