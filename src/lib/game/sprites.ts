@@ -111,6 +111,7 @@ const PALETTES: Record<NpcSprite | "joueur", Palette> = {
   prof: { o: "#171a20", h: "#8a6a4a", H: "#6b5138", s: "#f0c49a", e: "#241d18", b: "#eef2f6", p: "#5a6472", f: "#2a2f38" },
   maman: { o: "#171a20", h: "#a8562f", H: "#83411f", s: "#f0c49a", e: "#241d18", b: "#d2698f", p: "#4a5468", f: "#2a2f38" },
   infirmiere: { o: "#171a20", h: "#f2a3bd", H: "#d3819c", s: "#f0c49a", e: "#241d18", b: "#f6f8fa", p: "#e05a7a", f: "#dfe4ea" },
+  vendeur: { o: "#171a20", h: "#2f3a4a", H: "#212a36", s: "#f0c49a", e: "#241d18", b: "#3f7fbf", p: "#2a3648", f: "#22262c" },
   gamin: { o: "#171a20", h: "#3b4a6b", H: "#2a3550", s: "#f0c49a", e: "#241d18", b: "#e0c04a", p: "#43506a", f: "#2a2f38" },
   exploratrice: { o: "#171a20", h: "#6b4a2f", H: "#503722", s: "#f0c49a", e: "#241d18", b: "#8fa84e", p: "#5a4a38", f: "#33291f" },
   villageois: { o: "#171a20", h: "#4a3a2a", H: "#35281c", s: "#f0c49a", e: "#241d18", b: "#7a8a9a", p: "#3a4450", f: "#2a2f38" },

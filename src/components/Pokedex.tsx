@@ -37,10 +37,13 @@ export function usePokedex({
   index: initialIndex,
   active,
   onExit,
+  only,
 }: {
   index: IndexEntry[];
   active: boolean;
   onExit: () => void;
+  /** Restreint le dex aux espèces rencontrées, quand on l'ouvre depuis le jeu. */
+  only?: number[];
 }): ModeParts {
   const [index, setIndex] = useState(initialIndex);
   const [selectedId, setSelectedId] = useState(1);
@@ -55,6 +58,10 @@ export function usePokedex({
   const cache = useRef(new Map<number, PokemonDetail>());
   const searchRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Ouvert depuis le jeu, le dex ne doit pas afficher une fiche jamais croisée.
+  const currentId =
+    only?.length && !only.includes(selectedId) ? only[0] : selectedId;
 
   // Filet de sécurité : si la PokéAPI n'a pas répondu au rendu serveur,
   // on récupère l'index côté client plutôt que d'afficher un dex vide.
@@ -84,7 +91,7 @@ export function usePokedex({
 
   // Chargement de la fiche : le sprite précédent reste affiché pendant la requête.
   useEffect(() => {
-    const cached = cache.current.get(selectedId);
+    const cached = cache.current.get(currentId);
     if (cached) {
       setDetail(cached);
       setPending(false);
@@ -94,10 +101,10 @@ export function usePokedex({
 
     let alive = true;
     setPending(true);
-    fetchPokemon(selectedId)
+    fetchPokemon(currentId)
       .then((data) => {
         if (!alive) return;
-        cache.current.set(selectedId, data);
+        cache.current.set(currentId, data);
         setDetail(data);
         setError(null);
       })
@@ -107,12 +114,14 @@ export function usePokedex({
     return () => {
       alive = false;
     };
-  }, [selectedId]);
+  }, [currentId]);
 
   const entries = useMemo(() => {
     const range = GENERATIONS.find((g) => g.id === gen) ?? GENERATIONS[0];
     const q = query.trim().toLowerCase();
+    const known = only?.length ? new Set(only) : null;
     return index.filter((entry) => {
+      if (known && !known.has(entry.id)) return false;
       if (entry.id < range.from || entry.id > range.to) return false;
       if (!q) return true;
       return (
@@ -121,19 +130,19 @@ export function usePokedex({
         padDex(entry.id).startsWith(q)
       );
     });
-  }, [index, gen, query]);
+  }, [index, gen, query, only]);
 
   const step = useCallback(
     (delta: number) => {
       if (!entries.length) return;
-      const current = entries.findIndex((e) => e.id === selectedId);
+      const current = entries.findIndex((e) => e.id === currentId);
       const next = Math.min(
         Math.max((current === -1 ? 0 : current) + delta, 0),
         entries.length - 1,
       );
       setSelectedId(entries[next].id);
     },
-    [entries, selectedId],
+    [entries, currentId],
   );
 
   const shiftTab = useCallback((delta: number) => {
@@ -221,7 +230,9 @@ export function usePokedex({
 
   return {
     press,
-    count: `${entries.length} / ${index.length || "…"}`,
+    count: only
+      ? `${entries.length} espèce${entries.length > 1 ? "s" : ""} vue${entries.length > 1 ? "s" : ""}`
+      : `${entries.length} / ${index.length || "…"}`,
     top: (
       <TopScreen
         detail={detail}
@@ -234,7 +245,7 @@ export function usePokedex({
     bottom: (
       <BottomScreen
         entries={entries}
-        selectedId={selectedId}
+        selectedId={currentId}
         onSelect={setSelectedId}
         query={query}
         onQuery={setQuery}

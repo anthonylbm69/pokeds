@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { animatedUrl, staticUrl } from "@/lib/pokeapi";
+import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { MOVES, TYPE_FR, species } from "@/lib/game/data";
 import {
   activeMon,
@@ -49,6 +49,8 @@ export type GameParts = ModeParts & {
   begin: (mode: "nouvelle" | "continuer") => void;
   /** La coque y dépose les boutons maintenus : c'est ce qui fait marcher. */
   setHeld: (buttons: ReadonlySet<DsButton>) => void;
+  /** Espèces rencontrées : le Pokédex ouvert depuis le jeu s'y limite. */
+  seen: number[];
 };
 
 /** Ce qu'il faut faire une fois le dialogue terminé. */
@@ -56,6 +58,7 @@ type Then =
   | { do: "starter" }
   | { do: "heal"; respawn: boolean }
   | { do: "trainer"; npc: string }
+  | { do: "shop" }
   | { do: "world" };
 
 type BattleUi = {
@@ -72,7 +75,14 @@ type Phase =
   | { kind: "world" }
   | { kind: "text"; lines: string[]; i: number; then: Then | null }
   | { kind: "starter" }
+  | { kind: "shop"; message: string | null }
   | { kind: "battle"; ui: BattleUi };
+
+/** Le rayon de la Boutique, aux prix d'Unys. */
+const STOCK = [
+  { id: "ball", label: "POKÉ BALL", price: 200, note: "Pour capturer un Pokémon sauvage." },
+  { id: "potion", label: "POTION", price: 300, note: "Rend 20 PV à un Pokémon." },
+] as const;
 
 const INTRO = [
   "Bonjour ! Bienvenue dans le monde des POKéMON !",
@@ -105,6 +115,17 @@ export function useGame({
 
   const setHeld = useCallback((buttons: ReadonlySet<DsButton>) => {
     held.current = buttons;
+  }, []);
+
+  /** Le cri du Pokémon qui entre en scène, comme à l'ouverture d'un combat. */
+  const cry = useRef<HTMLAudioElement | null>(null);
+  const playCry = useCallback((id: number) => {
+    cry.current?.pause();
+    const audio = new Audio(cryUrl(id));
+    audio.volume = 0.3;
+    cry.current = audio;
+    // Le navigateur peut refuser la lecture : ce n'est pas bloquant.
+    void audio.play().catch(() => {});
   }, []);
 
   /** Démarre une partie neuve ou reprend la sauvegarde. */
@@ -179,6 +200,10 @@ export function useGame({
         });
         return;
       }
+      if (npc.shop) {
+        setPhase({ kind: "text", lines: npc.lines, i: 0, then: { do: "shop" } });
+        return;
+      }
       setPhase({ kind: "text", lines: npc.lines, i: 0, then: null });
     },
     [game],
@@ -190,12 +215,13 @@ export function useGame({
     (state: BattleState, queue: string[], origin: BattleUi["origin"]) => {
       setGame((g) => markSeen(g, state.foe.id));
       setCursor(0);
+      playCry(state.foe.id);
       setPhase({
         kind: "battle",
         ui: { state, queue, view: "message", throwing: false, origin },
       });
     },
-    [],
+    [playCry],
   );
 
   const startWildBattle = useCallback(
@@ -269,6 +295,15 @@ export function useGame({
         player.current = newPlayer(next.respawn.x, next.respawn.y, "down");
         lines.push("Vos Pokémon ont été soignés. Reprenez des forces !");
       }
+
+      // Une évolution change l'espèce en cours de combat : on réenregistre
+      // toute l'équipe au Pokédex plutôt que de la suivre coup par coup.
+      const owned = next.party.map((m) => m.id);
+      next = {
+        ...next,
+        seen: [...new Set([...next.seen, ...owned])],
+        caught: [...new Set([...next.caught, ...owned])],
+      };
 
       setGame(next);
       saveGame({ ...next, x: player.current.x, y: player.current.y, dir: player.current.dir });
@@ -419,11 +454,40 @@ export function useGame({
           });
           break;
         }
+        case "shop":
+          setCursor(0);
+          setPhase({ kind: "shop", message: null });
+          break;
         default:
           setPhase({ kind: "world" });
       }
     },
     [game, startTrainerBattle],
+  );
+
+  /** Achat d'un article : la boutique reste ouverte pour enchaîner. */
+  const buy = useCallback(
+    (index: number) => {
+      const item = STOCK[index];
+      if (!item) return;
+      if (game.money < item.price) {
+        setPhase({ kind: "shop", message: "Vous n'avez pas assez d'argent…" });
+        return;
+      }
+      const next: GameState = {
+        ...game,
+        money: game.money - item.price,
+        balls: game.balls + (item.id === "ball" ? 1 : 0),
+        potions: game.potions + (item.id === "potion" ? 1 : 0),
+      };
+      setGame(next);
+      saveGame({ ...next, x: player.current.x, y: player.current.y, dir: player.current.dir });
+      setPhase({
+        kind: "shop",
+        message: `Et voilà une ${item.label.toLowerCase()} ! Merci de votre visite.`,
+      });
+    },
+    [game],
   );
 
   const chooseStarter = useCallback(
@@ -529,6 +593,24 @@ export function useGame({
       };
     }
 
+    if (phase.kind === "shop") {
+      return {
+        title: "Boutique",
+        hint: "▲ ▼ pour choisir · A pour acheter · B pour sortir",
+        layout: "list",
+        list: [
+          ...STOCK.map((item) => ({
+            id: item.id,
+            label: item.label,
+            sub: `${item.price} P — vous en avez ${item.id === "ball" ? game.balls : game.potions}`,
+            disabled: game.money < item.price,
+            tone: "bag" as const,
+          })),
+          { id: "leave", label: "SORTIR", tone: "back" as const },
+        ],
+      };
+    }
+
     if (phase.kind === "name") {
       return {
         title: "Ton nom",
@@ -582,6 +664,16 @@ export function useGame({
           i: 0,
           then: null,
         });
+        return;
+      }
+      if (phase.kind === "shop") {
+        if (!choice) return;
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        // `buy` répond lui-même quand la bourse est trop légère.
+        buy(index);
         return;
       }
       if (!choice || choice.disabled) return;
@@ -638,7 +730,7 @@ export function useGame({
         else if (choice.id === "title") onExit();
       }
     },
-    [choices, phase, battleUi, draftName, chooseStarter, runTurn, save, firstReady, onOpenDex, onExit],
+    [choices, phase, battleUi, draftName, chooseStarter, runTurn, save, buy, firstReady, onOpenDex, onExit],
   );
 
   const moveCursor = useCallback(
@@ -687,6 +779,13 @@ export function useGame({
           else if (button === "a") pick(cursor);
           return;
 
+        case "shop":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") setPhase({ kind: "world" });
+          return;
+
         case "battle": {
           const ui = phase.ui;
           if (ui.view === "message") {
@@ -719,7 +818,11 @@ export function useGame({
   /* ------------------------------------------------------------ rendu */
 
   const dialogue =
-    phase.kind === "text" ? phase.lines[phase.i] : null;
+    phase.kind === "text"
+      ? phase.lines[phase.i]
+      : phase.kind === "shop"
+        ? (phase.message ?? "Que puis-je vous servir ?")
+        : null;
 
   const top = (() => {
     if (phase.kind === "intro" || phase.kind === "name") {
@@ -771,9 +874,11 @@ export function useGame({
         {dialogue && (
           <div className="scene__box">
             <p>{dialogue}</p>
-            <span className="scene__next" aria-hidden="true">
-              ▼
-            </span>
+            {phase.kind === "text" && (
+              <span className="scene__next" aria-hidden="true">
+                ▼
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -810,6 +915,7 @@ export function useGame({
     press,
     begin,
     setHeld,
+    seen: game.seen,
     count: game.party.length
       ? `${game.party.length}/6 · ${game.caught.length} vus`
       : "AUCUN POKéMON",

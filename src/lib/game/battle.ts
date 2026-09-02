@@ -332,6 +332,18 @@ function grantExp(state: BattleState, messages: string[]): void {
         );
       }
     }
+
+    // L'évolution suit immédiatement le niveau atteint, comme dans le jeu.
+    const form = species(mon.id);
+    if (form.evolvesInto && form.evolvesAt && mon.level >= form.evolvesAt) {
+      const hpBefore = maxHp(mon);
+      const from = mon.name;
+      mon.id = form.evolvesInto;
+      mon.name = species(mon.id).name;
+      mon.hp = Math.min(maxHp(mon), mon.hp + (maxHp(mon) - hpBefore));
+      messages.push(`Quoi ? ${from} évolue !`);
+      messages.push(`Félicitations ! ${from} a évolué en ${mon.name} !`);
+    }
   }
 }
 

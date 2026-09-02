@@ -73,6 +73,10 @@ export const animatedBackUrl = (id: number) =>
     ? `${SPRITES}/versions/generation-v/black-white/animated/back/${id}.gif`
     : null;
 
+/** Cri d'un Pokémon, servi tel quel par le dépôt PokéAPI (aucune requête API). */
+export const cryUrl = (id: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${id}.ogg`;
+
 export const staticUrl = (id: number) => `${SPRITES}/${id}.png`;
 
 export const staticBackUrl = (id: number) => `${SPRITES}/back/${id}.png`;

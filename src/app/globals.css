@@ -1698,6 +1698,25 @@ body::before {
     #9ed07e 52%,
     #7cb85f 100%
   );
+  /* L'éclair d'entrée en combat, comme la transition des jeux. */
+  animation: battleIn 0.5s cubic-bezier(0.3, 0.8, 0.4, 1) both;
+}
+
+@keyframes battleIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.22);
+    filter: brightness(4) saturate(0);
+  }
+  35% {
+    opacity: 1;
+    filter: brightness(1.7) saturate(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 
 .battle__field {

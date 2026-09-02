@@ -30,7 +30,9 @@ export const TILES: Record<string, Tile> = {
   S: { kind: "sign", solid: true },
 };
 
-export type NpcSprite = "prof" | "maman" | "infirmiere" | "gamin" | "exploratrice" | "villageois";
+export type NpcSprite =
+  | "prof" | "maman" | "infirmiere" | "vendeur"
+  | "gamin" | "exploratrice" | "villageois";
 
 export type TrainerSpec = {
   title: string;
@@ -56,6 +58,8 @@ export type NpcSpec = {
   heals?: boolean;
   /** Déclenche le choix du starter. */
   starter?: boolean;
+  /** Ouvre la boutique après la réplique. */
+  shop?: boolean;
 };
 
 export type Warp = { x: number; y: number; to: MapId; tx: number; ty: number; dir?: Dir };
@@ -315,12 +319,13 @@ export const MAPS: Record<MapId, MapSpec> = {
   centre: {
     name: "Centre Pokémon",
     indoor: true,
+    // Comme à Unys, le comptoir de la Boutique partage la salle du Centre.
     tiles: [
       "XXXXXXXXXXXX",
-      "X----CCCC--X",
-      "X----CCCC--X",
+      "X-CCC--CCC-X",
+      "X-CCC--CCC-X",
       "X----------X",
-      "X--B----B--X",
+      "X-B------B-X",
       "X----------X",
       "X----------X",
       "X----------X",
@@ -330,7 +335,7 @@ export const MAPS: Record<MapId, MapSpec> = {
     npcs: [
       {
         id: "infirmiere",
-        x: 6,
+        x: 3,
         y: 3,
         dir: "down",
         sprite: "infirmiere",
@@ -339,6 +344,15 @@ export const MAPS: Record<MapId, MapSpec> = {
           "Bienvenue au Centre Pokémon !",
           "Nous allons soigner vos Pokémon. Un instant, je vous prie…",
         ],
+      },
+      {
+        id: "vendeur",
+        x: 8,
+        y: 3,
+        dir: "down",
+        sprite: "vendeur",
+        shop: true,
+        lines: ["Bienvenue à la Boutique ! Que puis-je vous servir ?"],
       },
     ],
     warps: [

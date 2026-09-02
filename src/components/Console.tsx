@@ -74,6 +74,8 @@ export default function Console({ index }: { index: IndexEntry[] }) {
   const dex = usePokedex({
     index,
     active: mode === "dex",
+    // Depuis le jeu, le Pokédex ne montre que les espèces déjà croisées.
+    only: dexFrom === "game" ? game.seen : undefined,
     onExit: useCallback(() => {
       if (dexFrom === "game") {
         setMode("game");
