@@ -18,13 +18,17 @@ import {
   type BattleState,
 } from "@/lib/game/battle";
 import {
+  BUS_STOPS,
   MAPS,
   STEP,
+  busStopOf,
   rollEncounter,
   seesPlayer,
   signAt,
+  tileAt,
   tileChar,
   warpAt,
+  type MapId,
   type NpcSpec,
 } from "@/lib/game/world";
 import {
@@ -46,6 +50,7 @@ import {
 } from "@/lib/game/state";
 import type { DsButton, ModeParts } from "../DSConsole";
 import BattleView from "./BattleView";
+import BusRide from "./BusRide";
 import RegionMap from "./RegionMap";
 import TouchPanel, { type Choice } from "./TouchPanel";
 import WorldView, { newPlayer, type PlayerPos } from "./WorldView";
@@ -86,6 +91,8 @@ type Phase =
   | { kind: "text"; lines: string[]; i: number; then: Then | null }
   | { kind: "starter" }
   | { kind: "carte" }
+  | { kind: "bus" }
+  | { kind: "voyage"; to: MapId; label: string }
   | { kind: "shop"; counter: Counter; message: string | null }
   | { kind: "battle"; ui: BattleUi };
 
@@ -115,6 +122,15 @@ const ENCOUNTER_RATE = 0.14;
  * écartée — et la séquence entière doit tenir dans la fenêtre ci-dessous,
  * sinon marcher de long en large finirait par la composer par accident.
  */
+/** Durée du trajet en autocar, animation comprise. */
+const RIDE_MS = 2800;
+
+const BADGE_LABEL: Record<string, string> = {
+  trio: "insigne Trio",
+  sylve: "insigne Sylve",
+  roc: "insigne Roc",
+};
+
 const CHEAT_LEFTS = 5;
 const CHEAT_RIGHTS = 2;
 const CHEAT_WINDOW = 3000;
@@ -469,11 +485,58 @@ export function useGame({
       talk(npc);
       return;
     }
+    if (tileAt(map, tx, ty)?.kind === "bus") {
+      setCursor(0);
+      setPhase({ kind: "bus" });
+      return;
+    }
+
     const sign = signAt(map, tx, ty);
     if (sign) {
       setPhase({ kind: "text", lines: sign.text, i: 0, then: null });
     }
   }, [map, talk]);
+
+  /* --------------------------------------------------- les Cars Faure */
+
+  /** Fin du trajet : on descend à l'arrêt de la destination. */
+  const arriveByBus = useCallback(
+    (to: MapId) => {
+      const stop = busStopOf(to);
+      if (!stop) {
+        setPhase({ kind: "world" });
+        return;
+      }
+      const next: GameState = {
+        ...game,
+        map: to,
+        x: stop.x,
+        y: stop.y,
+        dir: "down",
+        riding: false,
+      };
+      player.current = newPlayer(stop.x, stop.y, "down");
+      setGame(next);
+      saveGame(next);
+      setPhase({
+        kind: "text",
+        lines: [
+          `Terminus : ${stop.label}.`,
+          "Merci d'avoir voyagé avec les Cars Faure !",
+        ],
+        i: 0,
+        then: null,
+      });
+    },
+    [game],
+  );
+
+  useEffect(() => {
+    if (phase.kind !== "voyage") return;
+    const to = phase.to;
+    const id = window.setTimeout(() => arriveByBus(to), RIDE_MS);
+    return () => window.clearTimeout(id);
+  }, [phase, arriveByBus]);
 
   const save = useCallback(() => {
     const next = {
@@ -746,6 +809,38 @@ export function useGame({
       };
     }
 
+    if (phase.kind === "bus") {
+      return {
+        title: "Cars Faure",
+        hint: "▲ ▼ pour choisir · A pour monter · B pour renoncer",
+        layout: "list",
+        list: [
+          ...BUS_STOPS.filter((stop) => stop.map !== game.map).map((stop) => {
+            const ouvert = !stop.badge || hasFlag(game, `insigne:${stop.badge}`);
+            return {
+              id: stop.map,
+              label: stop.label,
+              sub: ouvert
+                ? "desservi"
+                : `${BADGE_LABEL[stop.badge!]} exigé`,
+              disabled: !ouvert,
+              tone: (ouvert ? "bag" : "back") as Choice["tone"],
+            };
+          }),
+          { id: "leave", label: "RENONCER", tone: "back" },
+        ],
+      };
+    }
+
+    if (phase.kind === "voyage") {
+      return {
+        title: "Cars Faure",
+        hint: "Trajet en cours…",
+        layout: "row",
+        list: [],
+      };
+    }
+
     if (phase.kind === "carte") {
       return {
         title: "Carte de la région",
@@ -903,6 +998,17 @@ export function useGame({
         return;
       }
 
+      if (phase.kind === "bus") {
+        if (!choice || choice.disabled) return;
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        const stop = busStopOf(choice.id as MapId);
+        if (stop) setPhase({ kind: "voyage", to: stop.map, label: stop.label });
+        return;
+      }
+
       if (phase.kind === "world") {
         if (choice.id === "carte") setPhase({ kind: "carte" });
         else if (choice.id === "dex") onOpenDex();
@@ -998,6 +1104,17 @@ export function useGame({
           }
           return;
 
+        case "bus":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") setPhase({ kind: "world" });
+          return;
+
+        // Le trajet suit son cours : aucune commande ne l'interrompt.
+        case "voyage":
+          return;
+
         case "world":
           if (button === "a") interact();
           else if (button === "x") save();
@@ -1090,6 +1207,8 @@ export function useGame({
 
     if (phase.kind === "carte") return <RegionMap current={game.map} />;
 
+    if (phase.kind === "voyage") return <BusRide destination={phase.label} />;
+
     if (phase.kind === "battle") {
       const foeTrainer =
         phase.ui.showTrainer && phase.ui.origin.kind === "dresseur"
@@ -1170,6 +1289,7 @@ export function useGame({
     focus:
       phase.kind === "starter" ||
       phase.kind === "shop" ||
+      phase.kind === "bus" ||
       phase.kind === "name" ||
       (battleUi && battleUi.view !== "message")
         ? "bottom"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { iconUrl, staticUrl } from "@/lib/pokeapi";
 import { SPECIES, TYPE_FR, species } from "@/lib/game/data";
 import { maxHp, type Mon } from "@/lib/game/battle";
@@ -84,6 +85,14 @@ export default function TouchPanel({
   onNameChange,
   nameRef,
 }: Props) {
+  // Une liste longue — les dix arrêts des Cars Faure — dépasse la dalle :
+  // le choix sous le curseur est ramené dans le champ de vision.
+  const choicesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const picked = choicesRef.current?.children[cursor];
+    picked?.scrollIntoView({ block: "nearest" });
+  }, [cursor, choices]);
+
   return (
     <div className="pad">
       <header className="pad__head">
@@ -148,7 +157,7 @@ export default function TouchPanel({
       </div>
 
       {choices.length > 0 && !starters && (
-        <div className={`pad__choices pad__choices--${layout}`}>
+        <div ref={choicesRef} className={`pad__choices pad__choices--${layout}`}>
           {choices.map((choice, i) => (
             <button
               type="button"

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SPECIES } from "./data";
 import {
+  BUS_STOPS,
   MAPS,
   REGION,
   STEP,
@@ -140,6 +141,60 @@ describe("la carte de la région", () => {
         seen.add(inside);
       }
     }
+  });
+});
+
+describe("les Cars Faure", () => {
+  it("desservent chaque ville et chaque route", () => {
+    for (const node of REGION) {
+      expect(
+        BUS_STOPS.some((stop) => stop.map === node.map),
+        `${node.label} sans arrêt`,
+      ).toBe(true);
+    }
+    expect(BUS_STOPS).toHaveLength(REGION.length);
+  });
+
+  it("posent un vrai poteau sur la carte annoncée", () => {
+    for (const stop of BUS_STOPS) {
+      const map = MAPS[stop.map];
+      expect(map, `${stop.label} : carte inconnue`).toBeDefined();
+      const poteaux = map.tiles.join("").split("").filter((c) => c === "U").length;
+      expect(poteaux, `${stop.label} : ${poteaux} poteau(x)`).toBe(1);
+    }
+  });
+
+  it("déposent sur une case franchissable, à côté du poteau", () => {
+    for (const stop of BUS_STOPS) {
+      const map = MAPS[stop.map];
+      expect(
+        walkable(map, stop.x, stop.y, map.npcs),
+        `${stop.label} : arrivée bloquée en (${stop.x},${stop.y})`,
+      ).toBe(true);
+
+      const voisin = Object.values(STEP).some(
+        ({ dx, dy }) => tileAt(map, stop.x + dx, stop.y + dy)?.kind === "bus",
+      );
+      expect(voisin, `${stop.label} : arrivée loin du poteau`).toBe(true);
+    }
+  });
+
+  it("n'exigent que des insignes réellement distribués", () => {
+    const remis = new Set(
+      Object.values(MAPS).flatMap((map) =>
+        map.npcs.map((npc) => npc.trainer?.badge).filter(Boolean),
+      ),
+    );
+    for (const stop of BUS_STOPS) {
+      if (!stop.badge) continue;
+      expect(remis.has(stop.badge), `insigne « ${stop.badge} » jamais remis`).toBe(true);
+    }
+  });
+
+  it("laissent le départ accessible sans le moindre insigne", () => {
+    const libres = BUS_STOPS.filter((stop) => !stop.badge).map((stop) => stop.map);
+    expect(libres).toContain("bourg");
+    expect(libres.length).toBeGreaterThan(0);
   });
 });
 

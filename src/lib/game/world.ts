@@ -17,7 +17,7 @@ export type MapId =
 export type TileKind =
   | "grass" | "tall" | "path" | "flower" | "tree" | "water"
   | "wall" | "inwall" | "roof" | "door" | "floor" | "counter" | "furniture" | "sign"
-  | "arena" | "stands";
+  | "arena" | "stands" | "bus";
 
 type Tile = { kind: TileKind; solid: boolean; encounter?: boolean };
 
@@ -38,6 +38,7 @@ export const TILES: Record<string, Tile> = {
   S: { kind: "sign", solid: true },
   A: { kind: "arena", solid: false },
   E: { kind: "stands", solid: true },
+  U: { kind: "bus", solid: true },
 };
 
 export type NpcSprite =
@@ -106,7 +107,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##..TTTT.==.TTTT..##",
       "##..TTTT.==.TTTT..##",
       "##..WWDW.==.WWDW..##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##..F....==....F..##",
       "##.......==.......##",
       "##.TTTTTT==.......##",
@@ -204,7 +205,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##.......==.......##",
       "##..###..==..###..##",
       "##..###..==..###..##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##...,,,,==,,,,...##",
       "##...,,,,==,,,,...##",
       "##.......==.......##",
@@ -280,7 +281,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##,,,....==....,,,##",
       "##,,,....==.......##",
       "##,,,....==.......##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##..####.==.####..##",
       "##..####.==.####..##",
       "##.......==.......##",
@@ -389,7 +390,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##.......==.......##",
       "##.,,,,..==..,,,,.##",
       "##.,,,,..==..,,,,.##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##..###..==..###..##",
       "##..###..==..###..##",
       "##.......==.......##",
@@ -463,7 +464,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##..TTT..==..TTTT.##",
       "##..WDW..==..WWDW.##",
       "##.......==.......##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##..TTTT.==.TTTT..##",
       "##..TTTT.==.TTTT..##",
       "##..WWDW.==.WWDW..##",
@@ -720,7 +721,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##.......==.......##",
       "##,,,,,..==..,,,,,##",
       "##,,,,,..==..,,,,,##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##..###..==..###..##",
       "##..###..==..###..##",
       "##..###..==..###..##",
@@ -822,7 +823,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##..TTTT.==.TTTT..##",
       "##..WWDW.==.WWDW..##",
       "##.......==.......##",
-      "##..F....==....F..##",
+      "##..F....==U...F..##",
       "##.......==.......##",
       "##.TTTTT.==.TTTTT.##",
       "##.TTTTT.==.TTTTT.##",
@@ -1055,7 +1056,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##.......==.......##",
       "##,,,,,..==..,,,,,##",
       "##,,,,,..==..,,,,,##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##..#.#..==..#.#..##",
       "##.......==.......##",
       "##..###..==..###..##",
@@ -1144,7 +1145,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##.......==.......##",
       "##..###..==..###..##",
       "##..###..==..###..##",
-      "##.......==.......##",
+      "##.......==U......##",
       "##,,,,,..==..,,,,,##",
       "##,,,,,..==..,,,,,##",
       "##.......==.......##",
@@ -1233,7 +1234,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##..TTTT.==.TTTT..##",
       "##..WWDW.==.WWDW..##",
       "##.......==.......##",
-      "##..F....==....F..##",
+      "##..F....==U...F..##",
       "##.......==.......##",
       "##.TTTTT.==.TTTTT.##",
       "##.TTTTT.==.TTTTT.##",
@@ -1498,6 +1499,39 @@ export const REGION: RegionNode[] = [
 /** Nœud de la carte où se trouve le joueur, intérieurs compris. */
 export const regionNodeOf = (map: MapId): RegionNode | null =>
   REGION.find((node) => node.map === map || node.inside?.includes(map)) ?? null;
+
+/* ------------------------------------------------ les Cars Faure */
+
+export type BusStop = {
+  map: MapId;
+  label: string;
+  /**
+   * Insigne exigé pour descendre ici. Une ville et les routes qui y mènent
+   * partagent le même : sans l'insigne Roc, ni Mions ni ses deux routes ne
+   * sont desservies.
+   */
+  badge: "trio" | "sylve" | "roc" | null;
+  /** Où le car dépose : toujours le chemin, juste à côté de l'arrêt. */
+  x: number;
+  y: number;
+};
+
+/** Le réseau, du sud au nord. */
+export const BUS_STOPS: BusStop[] = [
+  { map: "bourg", label: "Renouet Bourg", badge: null, x: 10, y: 6 },
+  { map: "route1", label: "Route 1", badge: null, x: 10, y: 8 },
+  { map: "route2", label: "Route 2", badge: "trio", x: 10, y: 8 },
+  { map: "route3", label: "Route 3", badge: "trio", x: 10, y: 4 },
+  { map: "maillard", label: "Maillard", badge: "trio", x: 10, y: 5 },
+  { map: "route4", label: "Route 4 — la hêtraie", badge: "sylve", x: 10, y: 4 },
+  { map: "aigueperse", label: "Aigueperse", badge: "sylve", x: 10, y: 6 },
+  { map: "route5", label: "Route 5 — les sables", badge: "roc", x: 10, y: 4 },
+  { map: "route6", label: "Route 6 — la crête", badge: "roc", x: 10, y: 4 },
+  { map: "mions", label: "Mions", badge: "roc", x: 10, y: 6 },
+];
+
+export const busStopOf = (map: MapId) =>
+  BUS_STOPS.find((stop) => stop.map === map) ?? null;
 
 /* --------------------------------------------------------------- accès */
 

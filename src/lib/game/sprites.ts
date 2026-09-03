@@ -237,6 +237,57 @@ export function trainerPortrait(who: NpcSprite | "joueur"): string {
   return url;
 }
 
+/* ------------------------------------------------- le car des lignes */
+
+/** L'autocar, pour l'animation de voyage : trente-deux pixels de long. */
+const COACH = [
+  "................................",
+  "....oooooooooooooooooooooooo....",
+  "...owwwwwwwwwwwwwwwwwwwwwwwwo...",
+  "..owgggowgggowgggowgggowwwwwwo..",
+  "..owgggowgggowgggowgggowwwwwwo..",
+  "..owgggowgggowgggowgggowwwwwwo..",
+  "..owwwwwwwwwwwwwwwwwwwwwwwwwwo..",
+  "..obbbbbbbbbbbbbbbbbbbbbbbbbbo..",
+  "..owwwwwwwwwwwwwwwwwwwwwwwwwwo..",
+  "..oooooooooooooooooooooooooooo..",
+  "....okko..............okko......",
+  "....okko..............okko......",
+  ".....oo................oo.......",
+  "................................",
+];
+
+const COACH_COLORS: Palette = {
+  o: "#1b2029",
+  w: "#f4f6f8",
+  g: "#8fd2f0",
+  b: "#1f5aa8",
+  k: "#3a4150",
+};
+
+let coach: string | null = null;
+
+/** Image de l'autocar, prête pour une balise `img`. */
+export function coachSprite(): string {
+  if (typeof document === "undefined") return "";
+  if (coach) return coach;
+
+  const scale = 3;
+  const sheet = canvas(COACH[0].length * scale, COACH.length * scale);
+  const ctx = sheet.getContext("2d")!;
+  COACH.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const color = COACH_COLORS[row[x]];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(x * scale, y * scale, scale, scale);
+    }
+  });
+
+  coach = sheet.toDataURL();
+  return coach;
+}
+
 /* ------------------------------------------------------------ le vélo */
 
 const BIKE = [
@@ -453,6 +504,23 @@ const PAINTERS: Record<TileKind, Painter> = {
     px(ctx, "#a87e4c", 0, 12, 16, 4);
     px(ctx, "#8a6540", 0, 15, 16, 1);
   },
+  // Arrêt des Cars Faure : un poteau, un panneau bleu, un car dessus.
+  bus: (ctx, v, g) => {
+    fill(ctx, g.base);
+    px(ctx, g.alt, 0, 0, 8, 8);
+    px(ctx, g.alt, 8, 8, 8, 8);
+    px(ctx, "#3a4150", 7, 9, 2, 7);
+    px(ctx, "#152a52", 2, 1, 12, 9);
+    px(ctx, "#2f5aa8", 3, 2, 10, 7);
+    px(ctx, "#f2f4f6", 4, 3, 8, 4);
+    px(ctx, "#7fc4e8", 5, 4, 2, 2);
+    px(ctx, "#7fc4e8", 8, 4, 2, 2);
+    px(ctx, "#e8c25a", 4, 7, 8, 1);
+    px(ctx, "#1f2430", 5, 7, 1, 1);
+    px(ctx, "#1f2430", 10, 7, 1, 1);
+    if (v % 2) px(ctx, "#8fa6c8", 3, 8, 10, 1);
+  },
+
   /* -------------------------------------------------------- les arènes */
 
   // Terrain de combat : argile battue et lignes blanches réglementaires.
