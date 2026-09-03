@@ -24,7 +24,7 @@ export type DsButton =
 export type ModeParts = {
   top: React.ReactNode;
   bottom: React.ReactNode;
-  press: (button: DsButton) => void;
+  press: (button: DsButton, repeat?: boolean) => void;
   count?: string;
   /**
    * Dalle qui porte l'action du moment. Sur les écrans trop courts pour en
@@ -36,7 +36,8 @@ export type ModeParts = {
 type Props = {
   top: React.ReactNode;
   bottom: React.ReactNode;
-  onPress: (button: DsButton) => void;
+  /** `repeat` distingue la répétition automatique d'un appui volontaire. */
+  onPress: (button: DsButton, repeat?: boolean) => void;
   /** Info-bulle de chaque bouton : ce qu'il déclenche dans le Pokédex. */
   labels?: Partial<Record<DsButton, string>>;
   /** Petit compteur gravé sous l'écran tactile. */
@@ -279,11 +280,11 @@ export default function DSConsole({
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       setHeld(button);
-      press.current(button);
+      press.current(button, false);
       if (!REPEATING.has(button)) return;
       delay.current = window.setTimeout(() => {
         repeat.current = window.setInterval(
-          () => press.current(button),
+          () => press.current(button, true),
           REPEAT_RATE,
         );
       }, REPEAT_DELAY);
@@ -310,7 +311,7 @@ export default function DSConsole({
 
       e.preventDefault();
       setKeyed((set) => new Set(set).add(entry.button));
-      press.current(entry.button);
+      press.current(entry.button, e.repeat);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {

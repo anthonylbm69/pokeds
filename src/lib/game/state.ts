@@ -3,6 +3,7 @@
  * pour que `localStorage` suffise.
  */
 
+import { MOVES, type MoveId } from "./data";
 import { createMon, healMon, maxHp, type Mon } from "./battle";
 import type { Dir, MapId } from "./world";
 
@@ -43,6 +44,52 @@ export function counterStarter(starter: number | undefined): number {
 }
 
 export const BIKE_PRICE = 2000;
+
+/* --------------------------------------------------------- la dream team */
+
+/**
+ * L'équipe du code de triche : six niveau 50 aux IV parfaits, choisis pour
+ * couvrir un maximum de types en duel. Chacun garde au moins une attaque de
+ * son propre type, et l'ensemble couvre Dragon, Vol, Feu, Électrik, Roche,
+ * Ténèbres, Sol, Combat, Insecte, Eau et Normal.
+ */
+const DREAM: { id: number; moves: MoveId[] }[] = [
+  { id: 384, moves: ["draco-souffle", "coupe-vent", "jet-pierres", "plaquage"] },
+  { id: 643, moves: ["lance-flammes", "draco-souffle", "coupe-vent", "plaquage"] },
+  { id: 644, moves: ["eclair", "draco-souffle", "morsure", "plaquage"] },
+  { id: 248, moves: ["jet-pierres", "vibrobscur", "tunnel", "plaquage"] },
+  { id: 448, moves: ["balayage", "tunnel", "piqure", "vive-attaque"] },
+  { id: 130, moves: ["coquille-lame", "morsure", "jet-pierres", "plaquage"] },
+];
+
+export const DREAM_LEVEL = 50;
+
+/** Fabrique l'équipe de rêve, PV pleins et PP au maximum. */
+export function dreamTeam(): Mon[] {
+  return DREAM.map(({ id, moves }) => {
+    const mon = createMon(id, DREAM_LEVEL);
+    mon.ivs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    mon.moves = moves.map((move) => ({
+      id: move,
+      pp: MOVES[move].pp,
+      max: MOVES[move].pp,
+    }));
+    mon.hp = maxHp(mon);
+    return mon;
+  });
+}
+
+/** Remplace l'équipe et inscrit les nouveaux venus au Pokédex. */
+export function withDreamTeam(state: GameState): GameState {
+  const party = dreamTeam();
+  const ids = party.map((mon) => mon.id);
+  return {
+    ...state,
+    party,
+    seen: [...new Set([...state.seen, ...ids])],
+    caught: [...new Set([...state.caught, ...ids])],
+  };
+}
 
 const SAVE_KEY = "pokeds:partie";
 

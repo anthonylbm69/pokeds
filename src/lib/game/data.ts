@@ -290,6 +290,65 @@ export const SPECIES: Record<number, Species> = {
     entry: "Il taille sa roche avec le liquide de sa bouche et s'y installe. Sans elle, il ne trouve plus le sommeil.",
   },
 
+  /* ------------------------------------ têtes d'affiche de la dream team */
+
+  130: {
+    id: 130, name: "Léviator", genus: "Pokémon Atroce", types: ["water", "flying"],
+    base: { hp: 95, atk: 125, def: 79, spa: 60, spd: 100, spe: 81 },
+    catchRate: 45, baseExp: 189,
+    learnset: [
+      { level: 1, move: "morsure" },
+      { level: 1, move: "rugissement" },
+      { level: 20, move: "pistolet-a-o" },
+      { level: 25, move: "coquille-lame" },
+      { level: 32, move: "jet-pierres" },
+      { level: 40, move: "plaquage" },
+    ],
+    entry: "D'un caractère effroyable, il rase tout sur son passage quand sa colère monte. Sa fureur peut durer un mois entier.",
+  },
+  248: {
+    id: 248, name: "Tyranocif", genus: "Pokémon Armure", types: ["rock", "dark"],
+    base: { hp: 100, atk: 134, def: 110, spa: 95, spd: 100, spe: 61 },
+    catchRate: 45, baseExp: 270,
+    learnset: [
+      { level: 1, move: "morsure" },
+      { level: 1, move: "groz-yeux" },
+      { level: 20, move: "jet-pierres" },
+      { level: 28, move: "vibrobscur" },
+      { level: 36, move: "tunnel" },
+      { level: 44, move: "plaquage" },
+    ],
+    entry: "Sa carapace résiste à tout. Il fait s'écrouler les montagnes d'un coup d'épaule pour se bâtir un nid.",
+  },
+  448: {
+    id: 448, name: "Lucario", genus: "Pokémon Aura", types: ["fighting", "steel"],
+    base: { hp: 70, atk: 110, def: 70, spa: 115, spd: 70, spe: 90 },
+    catchRate: 45, baseExp: 184,
+    learnset: [
+      { level: 1, move: "vive-attaque" },
+      { level: 1, move: "groz-yeux" },
+      { level: 18, move: "balayage" },
+      { level: 26, move: "tunnel" },
+      { level: 34, move: "piqure" },
+      { level: 42, move: "plaquage" },
+    ],
+    entry: "Il perçoit l'aura de tout ce qui l'entoure et lit dans les pensées de son adversaire avant même qu'il ne bouge.",
+  },
+  643: {
+    id: 643, name: "Reshiram", genus: "Pokémon Blancheur", types: ["dragon", "fire"],
+    base: { hp: 100, atk: 120, def: 100, spa: 150, spd: 120, spe: 90 },
+    catchRate: 3, baseExp: 306,
+    learnset: [
+      { level: 1, move: "morsure" },
+      { level: 1, move: "groz-yeux" },
+      { level: 10, move: "flammeche" },
+      { level: 20, move: "draco-souffle" },
+      { level: 30, move: "lance-flammes" },
+      { level: 40, move: "plaquage" },
+    ],
+    entry: "Quand sa queue s'embrase, l'atmosphère entière se réchauffe. Il vient en aide à qui poursuit la vérité.",
+  },
+
   /* ---------------------------------------- les légendaires des Arènes */
 
   384: {

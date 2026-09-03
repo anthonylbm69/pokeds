@@ -89,12 +89,14 @@ export default function Console({ index }: { index: IndexEntry[] }) {
   const parts = mode === "dex" ? dex : mode === "game" ? game : null;
 
   const press = useCallback(
-    (button: DsButton) => {
+    (button: DsButton, repeat = false) => {
       if (boot.booting) {
         boot.press(button);
         return;
       }
-      parts?.press(button);
+      // L'indicateur de répétition doit suivre : le jeu s'en sert pour
+      // distinguer un appui volontaire d'une touche maintenue.
+      parts?.press(button, repeat);
     },
     [boot, parts],
   );

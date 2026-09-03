@@ -39,7 +39,9 @@ import {
   markSeen,
   newGame,
   saveGame,
+  withDreamTeam,
   withFlag,
+  DREAM_LEVEL,
   type GameState,
 } from "@/lib/game/state";
 import type { DsButton, ModeParts } from "../DSConsole";
@@ -106,6 +108,16 @@ const INTRO = [
 ];
 
 const ENCOUNTER_RATE = 0.14;
+
+/**
+ * Le code de triche : cinq fois à gauche, deux fois à droite. Seuls les
+ * appuis volontaires comptent — la répétition automatique de la marche est
+ * écartée — et la séquence entière doit tenir dans la fenêtre ci-dessous,
+ * sinon marcher de long en large finirait par la composer par accident.
+ */
+const CHEAT_LEFTS = 5;
+const CHEAT_RIGHTS = 2;
+const CHEAT_WINDOW = 3000;
 
 export function useGame({
   active,
@@ -558,6 +570,64 @@ export function useGame({
     [game],
   );
 
+  /* ------------------------------------------------ le code de triche */
+
+  const combo = useRef({ lefts: 0, rights: 0, at: 0 });
+
+  /**
+   * Compte les gauches puis les droites ; renvoie vrai quand la séquence
+   * aboutit. Des gauches en trop ne gênent pas — seules les cinq dernières
+   * comptent — mais toute autre touche remet le compteur à zéro.
+   */
+  const trackCheat = useCallback((button: DsButton) => {
+    const now = Date.now();
+    const state = combo.current;
+    if (now - state.at > CHEAT_WINDOW) {
+      state.lefts = 0;
+      state.rights = 0;
+    }
+    state.at = now;
+
+    if (button === "left") {
+      // Repartir à gauche après une droite, c'est recommencer la séquence.
+      if (state.rights > 0) state.lefts = 0;
+      state.rights = 0;
+      state.lefts = Math.min(state.lefts + 1, CHEAT_LEFTS);
+      return false;
+    }
+
+    if (button === "right" && state.lefts >= CHEAT_LEFTS) {
+      state.rights += 1;
+      if (state.rights >= CHEAT_RIGHTS) {
+        state.lefts = 0;
+        state.rights = 0;
+        return true;
+      }
+      return false;
+    }
+
+    state.lefts = 0;
+    state.rights = 0;
+    return false;
+  }, []);
+
+  const grantDreamTeam = useCallback(() => {
+    const next = withDreamTeam(game);
+    setGame(next);
+    saveGame({ ...next, x: player.current.x, y: player.current.y, dir: player.current.dir });
+    setPhase({
+      kind: "text",
+      lines: [
+        "★ CODE ACCEPTÉ ★",
+        `Six championnes et champions de niveau ${DREAM_LEVEL} rejoignent votre équipe.`,
+        `${next.party.map((mon) => mon.name).join(", ")}.`,
+        "L'ancienne équipe s'efface. Que le duel commence !",
+      ],
+      i: 0,
+      then: null,
+    });
+  }, [game]);
+
   /** Monter ou descendre du vélo : impossible à l'intérieur. */
   const toggleBike = useCallback(() => {
     if (!game.bike) return;
@@ -856,8 +926,15 @@ export function useGame({
   );
 
   const press = useCallback(
-    (button: DsButton) => {
+    (button: DsButton, repeat = false) => {
       if (!active) return;
+
+      // La séquence secrète ne se compose qu'au pas, et jamais en plein
+      // combat : remplacer l'équipe en cours de duel casserait la partie.
+      if (!repeat && trackCheat(button) && phase.kind === "world") {
+        grantDreamTeam();
+        return;
+      }
 
       switch (phase.kind) {
         case "intro":
@@ -931,7 +1008,7 @@ export function useGame({
           return;
       }
     },
-    [active, phase, cursor, pick, moveCursor, advanceBattle, interact, save, toggleBike, onOpenDex, onExit, resolveThen],
+    [active, phase, cursor, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
   );
 
   /* ---------------------------------------------------------- musique */
