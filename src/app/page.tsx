@@ -16,8 +16,11 @@ export default async function Home() {
     <main className="page">
       <Console index={index} />
       <p className="page__credit">
-        Glissez la coque pour la déplacer · molette pour zoomer · double-clic
-        pour recentrer — données &amp; sprites :{" "}
+        <span className="page__tip">
+          Glissez la coque pour la déplacer · molette pour zoomer · double-clic
+          pour recentrer —{" "}
+        </span>
+        données &amp; sprites :{" "}
         <a href="https://pokeapi.co" target="_blank" rel="noreferrer">
           PokéAPI
         </a>

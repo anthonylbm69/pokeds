@@ -69,6 +69,10 @@ body {
     #0b0d11;
   min-height: 100dvh;
   overflow: hidden;
+  /* Pas de rebond élastique ni de zoom au double-tap pendant une partie. */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Trame de fond très discrète, façon plastique texturé. */
@@ -87,6 +91,26 @@ body::before {
   position: fixed;
   inset: 0;
   overflow: hidden;
+}
+
+/**
+ * Même seuil que la bascule compacte de la coque : en dessous, la ligne de
+ * crédits se réduit à l'attribution et rend la place au jeu.
+ */
+@media (max-width: 667px), (max-height: 827px) {
+  .page {
+    padding-bottom: 15px;
+  }
+
+  .page__tip {
+    display: none;
+  }
+
+  .page__credit {
+    bottom: 2px;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
 }
 
 .page__credit {
@@ -280,6 +304,21 @@ body::before {
   -webkit-user-select: text;
 }
 
+/**
+ * Le contenu des dalles est composé une fois pour toutes en 512 × 384 ; ce
+ * calque le ramène à la taille réellement affichée. Sur grand écran le
+ * facteur vaut 1 et la règle ne change rien.
+ */
+.ds__fit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--dalle-w);
+  height: var(--dalle-h);
+  transform-origin: top left;
+  transform: scale(var(--glass-scale, 1));
+}
+
 /* Voile de balayage : la DS avait cette texture de dalle. */
 .ds__glass::after {
   content: "";
@@ -432,6 +471,11 @@ body::before {
 .ds__f--y { left: 0; top: 38px; }
 .ds__f--a { left: 76px; top: 38px; }
 .ds__f--b { left: 38px; top: 76px; }
+
+/* Le conteneur s'efface : les gâchettes se placent sur la coque elle-même. */
+.ds__shoulders {
+  display: contents;
+}
 
 /* Gâchettes, à cheval sur la charnière comme sur la vraie console. */
 .ds__shoulder {
@@ -1506,6 +1550,267 @@ body::before {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
+/* ============================================ la console en plein écran */
+
+/**
+ * Sous un certain gabarit, réduire la coque de bureau rendrait le texte
+ * illisible et les boutons intouchables. On repart alors d'une disposition
+ * verticale à la console portable : les deux dalles en haut, les commandes
+ * en bas, le tout occupant l'écran entier.
+ */
+.ds--compact {
+  position: static;
+  left: auto;
+  top: auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+    max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  filter: none;
+  touch-action: manipulation;
+}
+
+/* Rien à saisir : la coque ne se déplace plus. */
+.ds--compact .ds__grab {
+  pointer-events: none;
+  cursor: default;
+  touch-action: auto;
+}
+
+.ds--compact .ds__lid,
+.ds--compact .ds__base {
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.ds--compact .ds__base {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Le reliquat de hauteur se répartit autour des commandes. */
+  justify-content: center;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+.ds--compact .ds__lid-face {
+  padding: 6px;
+  border-radius: 10px;
+}
+
+/* Les haut-parleurs mangeraient la largeur utile. */
+.ds--compact .ds__speaker,
+.ds--compact .ds__led {
+  display: none;
+}
+
+/**
+ * Les deux dalles se partagent ce qui reste une fois les commandes posées.
+ * On part de la hauteur — 320 px de coque et de boutons, à diviser en deux —
+ * puis on plafonne à ce que la largeur autorise. Les deux dalles obtiennent
+ * ainsi exactement la même taille, quel que soit le téléphone.
+ */
+.ds--compact .ds__screen {
+  width: auto;
+  height: min(calc((100dvh - 320px) / 2), calc((100vw - 36px) * 3 / 4));
+  aspect-ratio: 4 / 3;
+  margin: 0 auto;
+}
+
+.ds--compact .ds__hinge {
+  height: 22px;
+  margin: 0 20%;
+  padding: 0 10px;
+  border-radius: 4px;
+}
+
+.ds--compact .ds__hinge-cap {
+  display: none;
+}
+
+.ds--compact .ds__brand {
+  margin: 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.24em;
+}
+
+/* Les gâchettes deviennent une rangée pleine largeur, au-dessus des dalles. */
+.ds--compact .ds__shoulders {
+  display: flex;
+  gap: 8px;
+}
+
+.ds--compact .ds__shoulder {
+  position: static;
+  width: auto;
+  flex: 1;
+  height: 34px;
+  border-radius: 8px;
+  place-items: center;
+  padding: 0;
+}
+
+/* Écran tactile en pleine largeur, commandes dessous. */
+.ds--compact .ds__deck {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "screen screen screen"
+    "dpad   .      face";
+  align-items: center;
+  gap: 12px 6px;
+}
+
+.ds--compact .ds__screen--bottom {
+  grid-area: screen;
+}
+
+.ds--compact .ds__dpad {
+  grid-area: dpad;
+  width: 132px;
+  height: 132px;
+  margin: 0;
+}
+
+.ds--compact .ds__face {
+  grid-area: face;
+  width: 132px;
+  height: 132px;
+  margin: 0;
+}
+
+/* Cibles tactiles : plus rien en dessous de la pulpe d'un pouce. */
+.ds--compact .ds__d--up { left: 44px; top: 0; width: 44px; height: 48px; }
+.ds--compact .ds__d--down { left: 44px; top: 84px; width: 44px; height: 48px; }
+.ds--compact .ds__d--left { left: 0; top: 44px; width: 48px; height: 44px; }
+.ds--compact .ds__d--right { left: 84px; top: 44px; width: 48px; height: 44px; }
+
+.ds--compact .ds__dpad-hub {
+  left: 42px;
+  top: 42px;
+  width: 48px;
+  height: 48px;
+}
+
+.ds--compact .ds__f {
+  width: 46px;
+  height: 46px;
+  font-size: 14px;
+}
+
+.ds--compact .ds__f--x { left: 43px; top: 0; }
+.ds--compact .ds__f--y { left: 0; top: 43px; }
+.ds--compact .ds__f--a { left: 86px; top: 43px; }
+.ds--compact .ds__f--b { left: 43px; top: 86px; }
+
+/* SELECT et START ferment la coque, à portée de pouce. */
+.ds--compact .ds__tray {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 2px;
+}
+
+.ds--compact .ds__count {
+  font-size: 9px;
+}
+
+.ds--compact .ds__mic {
+  display: none;
+}
+
+.ds--compact .ds__pills {
+  gap: 10px;
+}
+
+.ds--compact .ds__pill {
+  padding: 12px 24px;
+  font-size: 10px;
+}
+
+/* ---------------------------------------------- une seule dalle affichée */
+
+/**
+ * Sur les téléphones courts, deux dalles tomberaient sous les six pixels de
+ * texte. La console n'en montre alors qu'une, à pleine largeur : celle où se
+ * joue l'action, la charnière servant de sélecteur.
+ */
+.ds--single .ds__screen {
+  height: min(calc(100dvh - 300px), calc((100vw - 36px) * 3 / 4));
+}
+
+.ds--single.ds--show-bottom .ds__lid,
+.ds--single.ds--show-top .ds__screen--bottom {
+  max-height: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ds--single .ds__lid,
+.ds--single .ds__screen--bottom {
+  transition: max-height 0.18s ease, opacity 0.18s ease;
+}
+
+.ds--single.ds--show-top .ds__deck {
+  grid-template-areas: "dpad . face";
+  gap: 0 6px;
+}
+
+.ds__tabs {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  height: 100%;
+  padding: 3px;
+}
+
+.ds__tab {
+  flex: 1;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(212, 222, 236, 0.6);
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.ds__tab--on {
+  color: #fff;
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* L'orientation paysage n'offre pas la hauteur nécessaire aux deux dalles. */
+.ds__rotate {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--screen);
+  background: rgba(8, 10, 14, 0.94);
+}
+
+.ds__rotate span {
+  font-size: 44px;
+  color: var(--warm);
+  animation: nudge 1.2s ease-in-out infinite alternate;
+}
+
 /* ===================================================== menu de l'écran-titre */
 
 /* Zone de clic qui saute l'intro, sous le contenu. */
@@ -1562,6 +1867,18 @@ body::before {
 .bios__entry--on .bios__cursor {
   opacity: 1;
   animation: nudge 0.8s ease-in-out infinite alternate;
+}
+
+/**
+ * Toucher la dalle vaut appui sur A partout où l'on attend « continuer » :
+ * indispensable sur téléphone, transparent partout ailleurs.
+ */
+.tap-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  cursor: pointer;
+  background: none;
 }
 
 /* ============================================================ le monde */

@@ -26,6 +26,11 @@ export type ModeParts = {
   bottom: React.ReactNode;
   press: (button: DsButton) => void;
   count?: string;
+  /**
+   * Dalle qui porte l'action du moment. Sur les écrans trop courts pour en
+   * afficher deux, la console montre celle-ci.
+   */
+  focus?: "top" | "bottom";
 };
 
 type Props = {
@@ -38,6 +43,8 @@ type Props = {
   count?: string;
   /** Éclair blanc sur les deux dalles, au lancement du jeu. */
   flash?: boolean;
+  /** Dalle à privilégier quand une seule tient à l'écran. */
+  focus?: "top" | "bottom";
   /** Boutons maintenus : le jeu s'en sert pour faire marcher le héros. */
   onHold?: (buttons: ReadonlySet<DsButton>) => void;
 };
@@ -69,6 +76,21 @@ const KEYS = new Map(KEY_MAP.map((k) => [k.key.toLowerCase(), k]));
 const clamp = (v: number, min: number, max: number) =>
   Math.min(Math.max(v, min), max);
 
+/** Dimensions de la maquette, et dalle DS d'origine doublée. */
+const DESIGN_W = 820;
+const DESIGN_H = 990;
+const DALLE_W = 512;
+
+/** En dessous de cette échelle, la coque de bureau devient illisible. */
+const COMPACT_BELOW = 0.78;
+
+/**
+ * Sous cette hauteur de fenêtre, deux dalles côte à côte deviennent trop
+ * petites pour qu'on y lise quoi que ce soit : la console n'en montre plus
+ * qu'une, celle où se joue l'action.
+ */
+const SINGLE_BELOW = 780;
+
 /**
  * La coque : deux dalles empilées, les commandes de part et d'autre de l'écran
  * tactile. Elle traduit clavier et clics en appuis de boutons — c'est le
@@ -81,6 +103,7 @@ export default function DSConsole({
   labels = {},
   count,
   flash = false,
+  focus,
   onHold,
 }: Props) {
   const shell = useRef<HTMLDivElement>(null);
@@ -88,6 +111,24 @@ export default function DSConsole({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  /** Disposition tenant tout l'écran, pour téléphone et petites fenêtres. */
+  const [compact, setCompact] = useState(false);
+  const [single, setSingle] = useState(false);
+  const [portrait, setPortrait] = useState(true);
+  const [glass, setGlass] = useState(1);
+
+  /**
+   * Onglet choisi à la main. Il retient le contexte dans lequel il a été
+   * choisi : dès que l'action passe à l'autre dalle, le choix se périme tout
+   * seul et la console suit de nouveau le jeu.
+   */
+  const [picked, setPicked] = useState<{
+    against: "top" | "bottom" | undefined;
+    screen: "top" | "bottom";
+  } | null>(null);
+
+  const shown =
+    picked && picked.against === focus ? picked.screen : (focus ?? "top");
   const [held, setHeld] = useState<DsButton | null>(null);
   const [keyed, setKeyed] = useState<ReadonlySet<DsButton>>(new Set());
 
@@ -99,31 +140,63 @@ export default function DSConsole({
 
   /* ------------------------------------------------------ mise à l'échelle */
 
-  // La console a une taille fixe, en pixels de maquette : on la réduit juste
-  // ce qu'il faut pour qu'elle tienne dans la fenêtre.
+  /**
+   * Sur grand écran la coque garde sa taille de maquette, simplement réduite
+   * pour tenir dans la fenêtre. En dessous d'un certain seuil, cette réduction
+   * rendrait le texte et les boutons inutilisables : on bascule alors sur une
+   * disposition verticale qui occupe tout l'écran, dalles en haut et
+   * commandes en bas.
+   */
   useEffect(() => {
     const node = shell.current;
     if (!node) return;
 
     const measure = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      // Seuil calculé sur la maquette pour éviter de dépendre du rendu.
+      const small =
+        Math.min((vw - 28) / DESIGN_W, (vh - 56) / DESIGN_H) < COMPACT_BELOW;
+
+      setCompact(small);
+      setSingle(small && vh < SINGLE_BELOW);
+      setPortrait(vh >= vw);
+
+      if (small) {
+        setFit(1);
+        return;
+      }
       const w = node.offsetWidth || 1;
       const h = node.offsetHeight || 1;
       // Un peu plus d'air en bas : la ligne de crédits s'y glisse.
-      setFit(
-        clamp(
-          Math.min((window.innerWidth - 28) / w, (window.innerHeight - 56) / h),
-          0.3,
-          1.4,
-        ),
-      );
+      setFit(clamp(Math.min((vw - 28) / w, (vh - 56) / h), 0.3, 1.4));
     };
 
     measure();
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
   }, []);
 
-  const scale = (fit ?? 1) * zoom;
+  // Le contenu des dalles est dessiné en 512 × 384 : on le met à l'échelle de
+  // la dalle réellement affichée. Les deux sont observées — l'une peut être
+  // repliée — et c'est la plus large qui donne le facteur.
+  useEffect(() => {
+    const screens = shell.current?.querySelectorAll<HTMLElement>(".ds__screen");
+    if (!screens?.length || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      const widest = Math.max(...[...screens].map((s) => s.clientWidth));
+      setGlass((widest || DALLE_W) / DALLE_W);
+    });
+    screens.forEach((screen) => observer.observe(screen));
+    return () => observer.disconnect();
+  }, []);
+
+  const scale = compact ? 1 : (fit ?? 1) * zoom;
 
   /* --------------------------------------------------- déplacement & zoom */
 
@@ -169,14 +242,18 @@ export default function DSConsole({
     setZoom(1);
   };
 
-  const grab = {
-    onPointerDown: onGrabDown,
-    onPointerMove: onGrabMove,
-    onPointerUp: onGrabUp,
-    onPointerCancel: onGrabUp,
-    onWheel: onGrabWheel,
-    onDoubleClick: recenter,
-  };
+  // En disposition compacte, la coque remplit déjà l'écran : la déplacer ou
+  // la zoomer n'aurait aucun sens, et gênerait les gestes tactiles.
+  const grab = compact
+    ? {}
+    : {
+        onPointerDown: onGrabDown,
+        onPointerMove: onGrabMove,
+        onPointerUp: onGrabUp,
+        onPointerCancel: onGrabUp,
+        onWheel: onGrabWheel,
+        onDoubleClick: recenter,
+      };
 
   /* -------------------------------------------------------------- appuis */
 
@@ -283,19 +360,41 @@ export default function DSConsole({
   return (
     <div
       ref={shell}
-      className={`ds${dragging ? " is-dragging" : ""}`}
+      className={[
+        "ds",
+        dragging && "is-dragging",
+        compact && "ds--compact",
+        single && "ds--single",
+        single && `ds--show-${shown}`,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={{
         opacity: fit === null ? 0 : 1,
-        transform: `translate(${pan.x}px, ${pan.y}px) translate(-50%, -50%) scale(${scale})`,
+        transform: compact
+          ? undefined
+          : `translate(${pan.x}px, ${pan.y}px) translate(-50%, -50%) scale(${scale})`,
+        // Le contenu des dalles est dessiné en 512 × 384 puis mis à l'échelle.
+        ["--glass-scale" as string]: glass,
       }}
     >
+      {compact && !portrait && (
+        <p className="ds__rotate">
+          <span aria-hidden="true">⟳</span>
+          Tournez l&apos;appareil : la console à deux dalles se joue à la
+          verticale.
+        </p>
+      )}
+
       {/* ---------------------------------------------------- écran du haut */}
       <div className="ds__lid">
         <span className="ds__grab" {...grab} aria-hidden="true" />
         <div className="ds__lid-face">
           <span className="ds__speaker" aria-hidden="true" />
-          <section className="ds__screen" aria-label="Écran supérieur">
-            <div className="ds__glass">{top}</div>
+          <section className="ds__screen ds__screen--top" aria-label="Écran supérieur">
+            <div className="ds__glass">
+              <div className="ds__fit">{top}</div>
+            </div>
             {flash && <span className="ds__flash" aria-hidden="true" />}
           </section>
           <span className="ds__speaker" aria-hidden="true" />
@@ -305,17 +404,39 @@ export default function DSConsole({
 
       {/* ------------------------------------------------------- charnière */}
       <div className="ds__hinge" {...grab}>
-        <span className="ds__hinge-cap" aria-hidden="true" />
-        <span className="ds__brand">POKéDEX&nbsp;·&nbsp;DS</span>
-        <span className="ds__hinge-cap" aria-hidden="true" />
+        {single ? (
+          // Une seule dalle tient : la charnière devient le sélecteur.
+          <span className="ds__tabs" role="tablist" aria-label="Choisir la dalle">
+            {(["top", "bottom"] as const).map((which) => (
+              <button
+                type="button"
+                key={which}
+                role="tab"
+                aria-selected={shown === which}
+                className={`ds__tab${shown === which ? " ds__tab--on" : ""}`}
+                onClick={() => setPicked({ against: focus, screen: which })}
+              >
+                {which === "top" ? "DALLE HAUT" : "DALLE BAS"}
+              </button>
+            ))}
+          </span>
+        ) : (
+          <>
+            <span className="ds__hinge-cap" aria-hidden="true" />
+            <span className="ds__brand">POKéDEX&nbsp;·&nbsp;DS</span>
+            <span className="ds__hinge-cap" aria-hidden="true" />
+          </>
+        )}
       </div>
 
       {/* --------------------------------------- écran tactile & commandes */}
       <div className="ds__base">
         <span className="ds__grab" {...grab} aria-hidden="true" />
 
-        {key("l", "ds__shoulder ds__shoulder--l", "L")}
-        {key("r", "ds__shoulder ds__shoulder--r", "R")}
+        <div className="ds__shoulders">
+          {key("l", "ds__shoulder ds__shoulder--l", "L")}
+          {key("r", "ds__shoulder ds__shoulder--r", "R")}
+        </div>
 
         <div className="ds__deck">
           <div className="ds__dpad">
@@ -326,8 +447,10 @@ export default function DSConsole({
             <span className="ds__dpad-hub" aria-hidden="true" />
           </div>
 
-          <section className="ds__screen" aria-label="Écran tactile">
-            <div className="ds__glass">{bottom}</div>
+          <section className="ds__screen ds__screen--bottom" aria-label="Écran tactile">
+            <div className="ds__glass">
+              <div className="ds__fit">{bottom}</div>
+            </div>
             {flash && <span className="ds__flash" aria-hidden="true" />}
           </section>
 

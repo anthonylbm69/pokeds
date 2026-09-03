@@ -105,6 +105,7 @@ export default function Console({ index }: { index: IndexEntry[] }) {
       onHold={game.setHeld}
       labels={boot.booting ? TITLE_LABELS : mode === "game" ? GAME_LABELS : DEX_LABELS}
       count={boot.booting ? "PRÊT" : (parts?.count ?? "")}
+      focus={boot.booting ? "top" : parts?.focus}
       flash={boot.phase === "flash"}
       top={
         boot.booting ? (

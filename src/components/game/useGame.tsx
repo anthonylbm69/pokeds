@@ -940,6 +940,25 @@ export function useGame({
         ? (phase.message ?? "Que puis-je vous servir ?")
         : null;
 
+  /**
+   * Sans clavier, il faut pouvoir avancer le texte en touchant la dalle :
+   * cette couche transparente double le bouton A partout où l'on attend
+   * simplement « continuer ».
+   */
+  const tapToAdvance =
+    phase.kind === "intro" ||
+    phase.kind === "text" ||
+    (phase.kind === "battle" && phase.ui.view === "message");
+
+  const tap = tapToAdvance ? (
+    <button
+      type="button"
+      className="tap-layer"
+      onClick={() => press("a")}
+      aria-label="Continuer"
+    />
+  ) : null;
+
   const top = (() => {
     if (phase.kind === "intro" || phase.kind === "name") {
       const line = phase.kind === "intro" ? INTRO[phase.step] : "…comment t'appelles-tu ?";
@@ -962,6 +981,7 @@ export function useGame({
               </span>
             )}
           </div>
+          {tap}
         </div>
       );
     }
@@ -972,12 +992,15 @@ export function useGame({
           ? (npcById(phase.ui.origin.npc)?.sprite ?? null)
           : null;
       return (
-        <BattleView
-          state={phase.ui.state}
-          message={phase.ui.queue[0] ?? null}
-          throwing={phase.ui.throwing}
-          trainerSprite={foeTrainer}
-        />
+        <>
+          <BattleView
+            state={phase.ui.state}
+            message={phase.ui.queue[0] ?? null}
+            throwing={phase.ui.throwing}
+            trainerSprite={foeTrainer}
+          />
+          {tap}
+        </>
       );
     }
 
@@ -1003,6 +1026,7 @@ export function useGame({
             )}
           </div>
         )}
+        {tap}
       </div>
     );
   })();
@@ -1038,6 +1062,14 @@ export function useGame({
     begin,
     setHeld,
     seen: game.seen,
+    // Quand une seule dalle tient à l'écran, la console montre celle-ci.
+    focus:
+      phase.kind === "starter" ||
+      phase.kind === "shop" ||
+      phase.kind === "name" ||
+      (battleUi && battleUi.view !== "message")
+        ? "bottom"
+        : "top",
     count: game.party.length
       ? `${game.party.length}/6 · ${game.caught.length} vus`
       : "AUCUN POKéMON",

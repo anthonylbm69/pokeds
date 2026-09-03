@@ -75,6 +75,15 @@ describe("statistiques", () => {
     expect(mon.hp).toBe(maxHp(mon));
     expect(maxHp(mon)).toBeGreaterThanOrEqual(19);
     expect(maxHp(mon)).toBeLessThanOrEqual(21);
+  });
+
+  it("respecte le profil rapide de Vipélierre", () => {
+    // Au niveau 5 les IV tirés au sort peuvent égaliser Vitesse et Attaque :
+    // le profil d'espèce ne se lit qu'à IV identiques, et de préférence haut.
+    expect(species(495).base.spe).toBeGreaterThan(species(495).base.atk);
+
+    const mon = createMon(495, 50);
+    mon.ivs = { hp: 15, atk: 15, def: 15, spa: 15, spd: 15, spe: 15 };
     expect(statOf(mon, "spe")).toBeGreaterThan(statOf(mon, "atk"));
   });
 
@@ -87,9 +96,9 @@ describe("statistiques", () => {
   });
 });
 
-// Les combats et les captures tirent au sort : les bornes ci-dessous sont
-// larges à dessein, assez pour repérer une formule cassée sans jamais
-// clignoter sur un tirage malheureux.
+// Combats et captures tirent au sort. Les bornes ci-dessous sont posées à
+// plusieurs écarts-types du résultat attendu : assez serrées pour repérer une
+// formule cassée, assez larges pour ne jamais clignoter.
 describe("déroulement d'un combat", () => {
   it("un starter niveau 5 bat presque toujours un Ratentif sauvage", () => {
     let wins = 0;
@@ -100,7 +109,7 @@ describe("déroulement d'un combat", () => {
       const { state } = runBattle(mine, foe, Math.max(0, index));
       if (state.outcome === "victoire") wins += 1;
     }
-    expect(wins).toBeGreaterThan(170);
+    expect(wins).toBeGreaterThan(180);
   });
 
   it("consomme les PP de l'attaque utilisée", () => {
@@ -182,7 +191,7 @@ describe("capture", () => {
       const state = startWild([createMon(495, 5)], foe, bag);
       if (throwBall(state).state.outcome === "capture") caught += 1;
     }
-    expect(caught).toBeGreaterThan(170);
+    expect(caught).toBeGreaterThan(180);
   });
 
   it("résiste bien mieux à pleine santé", () => {
@@ -192,8 +201,8 @@ describe("capture", () => {
       const state = startWild([createMon(495, 5)], foe, bag);
       if (throwBall(state).state.outcome === "capture") caught += 1;
     }
-    expect(caught).toBeGreaterThan(10);
-    expect(caught).toBeLessThan(150);
+    expect(caught).toBeGreaterThan(20);
+    expect(caught).toBeLessThan(140);
   });
 
   it("consomme une Ball et refuse le vol chez un Dresseur", () => {

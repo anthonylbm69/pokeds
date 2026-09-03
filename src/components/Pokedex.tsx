@@ -230,6 +230,8 @@ export function usePokedex({
 
   return {
     press,
+    // La fiche prime : la liste reste à un onglet de distance.
+    focus: "top",
     count: only
       ? `${entries.length} espèce${entries.length > 1 ? "s" : ""} vue${entries.length > 1 ? "s" : ""}`
       : `${entries.length} / ${index.length || "…"}`,
