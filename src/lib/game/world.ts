@@ -5,13 +5,19 @@
 
 export type Dir = "up" | "down" | "left" | "right";
 
+/** Gamme de couleurs du décor traversé. */
+export type Biome = "plaine" | "foret" | "desert" | "montagne";
+
 export type MapId =
   | "bourg" | "maison" | "route1" | "route2" | "centre"
-  | "route3" | "maillard" | "centre2" | "arene" | "velo" | "maison2";
+  | "route3" | "maillard" | "centre2" | "arene" | "velo" | "maison2"
+  | "route4" | "aigueperse" | "centre3" | "arene2" | "maison3"
+  | "route5" | "route6" | "mions" | "centre4" | "arene3" | "maison4";
 
 export type TileKind =
   | "grass" | "tall" | "path" | "flower" | "tree" | "water"
-  | "wall" | "inwall" | "roof" | "door" | "floor" | "counter" | "furniture" | "sign";
+  | "wall" | "inwall" | "roof" | "door" | "floor" | "counter" | "furniture" | "sign"
+  | "arena" | "stands";
 
 type Tile = { kind: TileKind; solid: boolean; encounter?: boolean };
 
@@ -30,6 +36,8 @@ export const TILES: Record<string, Tile> = {
   C: { kind: "counter", solid: true },
   B: { kind: "furniture", solid: true },
   S: { kind: "sign", solid: true },
+  A: { kind: "arena", solid: false },
+  E: { kind: "stands", solid: true },
 };
 
 export type NpcSprite =
@@ -77,6 +85,8 @@ export type Encounter = { id: number; min: number; max: number; weight: number }
 export type MapSpec = {
   name: string;
   indoor?: boolean;
+  /** Gamme de couleurs du décor : plaine par défaut. */
+  biome?: Biome;
   tiles: string[];
   npcs: NpcSpec[];
   warps: Warp[];
@@ -448,11 +458,11 @@ export const MAPS: Record<MapId, MapSpec> = {
   maillard: {
     name: "Maillard",
     tiles: [
-      "####################",
-      "##..TTTT..TTTTTT..##",
-      "##..TTTT..TTTTTT..##",
-      "##..WWDW..WWWDWW..##",
-      "##................##",
+      "#########==#########",
+      "##..TTT..==..TTTT.##",
+      "##..TTT..==..TTTT.##",
+      "##..WDW..==..WWDW.##",
+      "##.......==.......##",
       "##.......==.......##",
       "##..TTTT.==.TTTT..##",
       "##..TTTT.==.TTTT..##",
@@ -494,8 +504,10 @@ export const MAPS: Record<MapId, MapSpec> = {
     warps: [
       { x: 9, y: 17, to: "route3", tx: 9, ty: 1, dir: "down" },
       { x: 10, y: 17, to: "route3", tx: 10, ty: 1, dir: "down" },
-      { x: 6, y: 3, to: "maison2", tx: 4, ty: 6, dir: "up" },
-      { x: 13, y: 3, to: "arene", tx: 6, ty: 8, dir: "up" },
+      { x: 9, y: 0, to: "route4", tx: 9, ty: 24, dir: "up" },
+      { x: 10, y: 0, to: "route4", tx: 10, ty: 24, dir: "up" },
+      { x: 5, y: 3, to: "maison2", tx: 4, ty: 6, dir: "up" },
+      { x: 15, y: 3, to: "arene", tx: 6, ty: 12, dir: "up" },
       { x: 6, y: 8, to: "centre2", tx: 6, ty: 8, dir: "up" },
       { x: 14, y: 8, to: "velo", tx: 4, ty: 6, dir: "up" },
     ],
@@ -506,6 +518,7 @@ export const MAPS: Record<MapId, MapSpec> = {
         text: ["MAILLARD", "La ville où l'on croise plus de Dresseurs que d'habitants."],
       },
       { x: 5, y: 11, text: ["C'est fermé. Les habitants sont à l'Arène."] },
+      { x: 16, y: 4, text: ["Porte close. On entend une télévision à l'intérieur."] },
       { x: 14, y: 11, text: ["Une odeur de gâteau s'échappe de la maison. Personne ne répond."] },
     ],
   },
@@ -558,15 +571,21 @@ export const MAPS: Record<MapId, MapSpec> = {
   arene: {
     name: "Arène de Maillard",
     indoor: true,
+    // Gradins au fond et sur les flancs, terrain d'argile au centre : on
+    // traverse la piste pour rejoindre le maître des lieux.
     tiles: [
       "XXXXXXXXXXXX",
+      "XEEEEEEEEEEX",
+      "XEEEEEEEEEEX",
       "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
       "X----------X",
-      "X-CC----CC-X",
-      "X----------X",
-      "X----------X",
-      "X-CC----CC-X",
-      "X----------X",
+      "XEE------EEX",
       "X----------X",
       "XXXXXDDXXXXX",
     ],
@@ -574,7 +593,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       {
         id: "championne-maelys",
         x: 6,
-        y: 1,
+        y: 3,
         dir: "down",
         sprite: "championne",
         lines: ["L'insigne Trio est à toi. Porte-le fièrement !"],
@@ -603,26 +622,26 @@ export const MAPS: Record<MapId, MapSpec> = {
       },
       {
         id: "serveur-theo",
-        x: 4,
-        y: 4,
+        x: 3,
+        y: 7,
         dir: "right",
         sprite: "gamin",
-        lines: ["La Championne t'attend au fond de la salle."],
+        lines: ["La Championne t'attend au bout de la piste."],
         trainer: {
           title: "Serveur",
           name: "Théo",
           sight: 3,
           reward: 320,
           team: [{ id: 505, level: 11 }],
-          intro: ["Pas si vite ! On ne passe pas sans m'affronter."],
+          intro: ["Pas si vite ! On ne traverse pas ma piste sans m'affronter."],
           defeat: ["Bien joué. La Championne sera un autre morceau."],
           after: ["Bonne chance contre Maëlys !"],
         },
       },
     ],
     warps: [
-      { x: 5, y: 9, to: "maillard", tx: 13, ty: 4, dir: "down" },
-      { x: 6, y: 9, to: "maillard", tx: 13, ty: 4, dir: "down" },
+      { x: 5, y: 13, to: "maillard", tx: 15, ty: 4, dir: "down" },
+      { x: 6, y: 13, to: "maillard", tx: 15, ty: 4, dir: "down" },
     ],
     signs: [],
   },
@@ -685,12 +704,800 @@ export const MAPS: Record<MapId, MapSpec> = {
       },
     ],
     warps: [
-      { x: 4, y: 7, to: "maillard", tx: 6, ty: 4, dir: "down" },
-      { x: 5, y: 7, to: "maillard", tx: 6, ty: 4, dir: "down" },
+      { x: 4, y: 7, to: "maillard", tx: 5, ty: 4, dir: "down" },
+      { x: 5, y: 7, to: "maillard", tx: 5, ty: 4, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  /* ================================================ le nord de la région */
+
+  route4: {
+    name: "Route 4",
+    biome: "foret",
+    tiles: [
+      "#########==#########",
+      "##.......==.......##",
+      "##,,,,,..==..,,,,,##",
+      "##,,,,,..==..,,,,,##",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##...,,,,==,,,,...##",
+      "##...,,,,==,,,,...##",
+      "##.......==.......##",
+      "##.#####.==.#####.##",
+      "##.#####.==.#####.##",
+      "##.......==.......##",
+      "##,,,,...==...,,,,##",
+      "##,,,,...==...,,,,##",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##..,,,,,==,,,,,..##",
+      "##..,,,,,==,,,,,..##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "bucheronne-alix",
+        x: 12,
+        y: 17,
+        dir: "left",
+        sprite: "exploratrice",
+        lines: ["La forêt étouffe les bruits. Ouvre l'œil dans les fougères."],
+        trainer: {
+          title: "Bûcheronne",
+          name: "Alix",
+          sight: 3,
+          reward: 620,
+          team: [
+            { id: 507, level: 14 },
+            { id: 496, level: 15 },
+          ],
+          intro: ["Personne ne traverse ma forêt sans se mesurer à moi !"],
+          defeat: ["Tu connais tes classiques, je te l'accorde."],
+          after: ["Aigueperse est au nord. Son Arène ne fait pas de cadeau."],
+        },
+      },
+      {
+        id: "scout-remi",
+        x: 7,
+        y: 8,
+        dir: "right",
+        sprite: "gamin",
+        lines: ["Les Pokémon d'ici sont bien plus coriaces qu'à Renouet."],
+        trainer: {
+          title: "Scout",
+          name: "Rémi",
+          sight: 3,
+          reward: 540,
+          team: [{ id: 519, level: 15 }],
+          intro: ["Halte ! On ne passe pas sans un petit combat."],
+          defeat: ["Rapide et bien joué…"],
+          after: ["Bonne route sous les branches !"],
+        },
+      },
+      {
+        id: "herboriste",
+        x: 14,
+        y: 11,
+        dir: "down",
+        sprite: "villageois",
+        lines: [
+          "Je cueille des baies sous les grands arbres.",
+          "Attention : plus on monte au nord, plus les Pokémon sont forts.",
+        ],
+      },
+    ],
+    warps: [
+      { x: 9, y: 25, to: "maillard", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 25, to: "maillard", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "aigueperse", tx: 9, ty: 18, dir: "up" },
+      { x: 10, y: 0, to: "aigueperse", tx: 10, ty: 18, dir: "up" },
+    ],
+    signs: [
+      { x: 4, y: 24, text: ["ROUTE 4 — LA HÊTRAIE", "Maillard au sud, Aigueperse au nord."] },
+    ],
+    encounters: [
+      { id: 506, min: 13, max: 16, weight: 25 },
+      { id: 509, min: 13, max: 16, weight: 20 },
+      { id: 519, min: 14, max: 17, weight: 25 },
+      { id: 557, min: 14, max: 17, weight: 30 },
+    ],
+  },
+
+  aigueperse: {
+    name: "Aigueperse",
+    biome: "foret",
+    tiles: [
+      "#########==#########",
+      "##.......==.......##",
+      "##..TTTT.==.TTTT..##",
+      "##..TTTT.==.TTTT..##",
+      "##..WWDW.==.WWDW..##",
+      "##.......==.......##",
+      "##..F....==....F..##",
+      "##.......==.......##",
+      "##.TTTTT.==.TTTTT.##",
+      "##.TTTTT.==.TTTTT.##",
+      "##.WWDWW.==.WWDWW.##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "##.......==.......##",
+      "##..TTT..==..TTT..##",
+      "##..WDW..==..WDW..##",
+      "##.......==.......##",
+      "##..,,,..==..,,,..##",
+      "##..,,,..==..,,,..##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "guide-aigueperse",
+        x: 12,
+        y: 11,
+        dir: "left",
+        sprite: "villageois",
+        lines: [
+          "Bienvenue à Aigueperse, la ville sous les frondaisons.",
+          "L'Arène est le grand bâtiment de droite. Steven n'y aligne qu'un Pokémon… et ça suffit.",
+        ],
+      },
+      {
+        id: "fillette-aigueperse",
+        x: 5,
+        y: 6,
+        dir: "right",
+        sprite: "maman",
+        lines: ["Mon frère dit qu'un Pokémon de type Feu ferait des merveilles à l'Arène."],
+      },
+    ],
+    warps: [
+      { x: 9, y: 19, to: "route4", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 19, to: "route4", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "route5", tx: 9, ty: 24, dir: "up" },
+      { x: 10, y: 0, to: "route5", tx: 10, ty: 24, dir: "up" },
+      { x: 6, y: 4, to: "maison3", tx: 4, ty: 6, dir: "up" },
+      { x: 5, y: 10, to: "centre3", tx: 6, ty: 8, dir: "up" },
+      { x: 14, y: 10, to: "arene2", tx: 6, ty: 12, dir: "up" },
+    ],
+    signs: [
+      {
+        x: 4,
+        y: 12,
+        text: ["AIGUEPERSE", "Ici, les maisons poussent entre les arbres."],
+      },
+      { x: 14, y: 4, text: ["Fermé. Un panneau annonce : « parti cueillir »."] },
+      { x: 5, y: 15, text: ["Personne ne répond. Un chien aboie derrière la porte."] },
+      { x: 14, y: 15, text: ["La porte est bloquée par une pile de bûches."] },
+    ],
+  },
+
+  centre3: {
+    name: "Centre Pokémon",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXXXX",
+      "X-CCC--CCC-X",
+      "X-CCC--CCC-X",
+      "X----------X",
+      "X-B------B-X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "infirmiere3",
+        x: 3,
+        y: 3,
+        dir: "down",
+        sprite: "infirmiere",
+        heals: true,
+        lines: [
+          "Bienvenue au Centre Pokémon d'Aigueperse !",
+          "Nous allons soigner vos Pokémon. Un instant, je vous prie…",
+        ],
+      },
+      {
+        id: "vendeur3",
+        x: 8,
+        y: 3,
+        dir: "down",
+        sprite: "vendeur",
+        shop: true,
+        lines: ["Bienvenue à la Boutique ! Que puis-je vous servir ?"],
+      },
+    ],
+    warps: [
+      { x: 5, y: 9, to: "aigueperse", tx: 5, ty: 11, dir: "down" },
+      { x: 6, y: 9, to: "aigueperse", tx: 5, ty: 11, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  arene2: {
+    name: "Arène d'Aigueperse",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXXXX",
+      "XEEEEEEEEEEX",
+      "XEEEEEEEEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "champion-steven",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "championne",
+        lines: ["L'insigne Sylve est à toi. La forêt te reconnaît."],
+        trainer: {
+          title: "Champion",
+          name: "Steven",
+          sight: 2,
+          reward: 2600,
+          badge: "sylve",
+          team: [{ id: 384, level: 12 }],
+          intro: [
+            "Je suis Steven, Champion d'Aigueperse.",
+            "On me dit excentrique de n'aligner qu'un seul Pokémon.",
+            "Vous comprendrez vite pourquoi il me suffit.",
+          ],
+          defeat: ["Vous avez fait tomber le ciel. Je m'incline."],
+          after: [
+            "Reçois l'insigne Sylve, taillé dans un hêtre centenaire.",
+            "Au nord commence le désert. Prends des Potions, beaucoup.",
+          ],
+        },
+      },
+      {
+        id: "sylvicultrice-jade",
+        x: 3,
+        y: 7,
+        dir: "right",
+        sprite: "exploratrice",
+        lines: ["Le Champion attend au bout de la piste."],
+        trainer: {
+          title: "Sylvicultrice",
+          name: "Jade",
+          sight: 3,
+          reward: 720,
+          team: [{ id: 557, level: 17 }],
+          intro: ["On ne traverse pas cette piste sans se battre."],
+          defeat: ["Solide. Vraiment solide."],
+          after: ["Steven t'attend. Bonne chance, tu vas en avoir besoin."],
+        },
+      },
+      {
+        id: "apprenti-noe",
+        x: 8,
+        y: 5,
+        dir: "left",
+        sprite: "gamin",
+        lines: ["Moi aussi je veux devenir Champion un jour !"],
+        trainer: {
+          title: "Apprenti",
+          name: "Noé",
+          sight: 3,
+          reward: 640,
+          team: [{ id: 507, level: 16 }],
+          intro: ["Deuxième obstacle ! Prêt ?"],
+          defeat: ["Aïe. Encore raté."],
+          after: ["Tu es vraiment fort…"],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "aigueperse", tx: 14, ty: 11, dir: "down" },
+      { x: 6, y: 13, to: "aigueperse", tx: 14, ty: 11, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  maison3: {
+    name: "Maison d'Aigueperse",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXX",
+      "X-BB---B-X",
+      "X--------X",
+      "X--------X",
+      "X-B------X",
+      "X--------X",
+      "X--------X",
+      "XXXXDDXXXX",
+    ],
+    npcs: [
+      {
+        id: "habitant3",
+        x: 6,
+        y: 2,
+        dir: "down",
+        sprite: "villageois",
+        lines: [
+          "Vous montez vers le désert ? Emportez de quoi soigner.",
+          "Les Mascaïman s'enfouissent dans le sable et surgissent sans prévenir.",
+        ],
+      },
+    ],
+    warps: [
+      { x: 4, y: 7, to: "aigueperse", tx: 6, ty: 5, dir: "down" },
+      { x: 5, y: 7, to: "aigueperse", tx: 6, ty: 5, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  route5: {
+    name: "Route 5",
+    biome: "desert",
+    tiles: [
+      "#########==#########",
+      "##.......==.......##",
+      "##,,,,,..==..,,,,,##",
+      "##,,,,,..==..,,,,,##",
+      "##.......==.......##",
+      "##..#.#..==..#.#..##",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##,,,,,,,==,,,,,,,##",
+      "##,,,,,,,==,,,,,,,##",
+      "##.......==.......##",
+      "##.#...#.==.#...#.##",
+      "##.......==.......##",
+      "##..,,,..==..,,,..##",
+      "##..,,,..==..,,,..##",
+      "##.......==.......##",
+      "##.#.#.#.==.#.#.#.##",
+      "##.......==.......##",
+      "##,,,,,..==..,,,,,##",
+      "##,,,,,..==..,,,,,##",
+      "##.......==.......##",
+      "##..#.#..==..#.#..##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "nomade-sofia",
+        x: 12,
+        y: 13,
+        dir: "left",
+        sprite: "exploratrice",
+        lines: ["Le sable brûle et les Pokémon mordent. Bienvenue."],
+        trainer: {
+          title: "Nomade",
+          name: "Sofia",
+          sight: 3,
+          reward: 880,
+          team: [
+            { id: 551, level: 19 },
+            { id: 505, level: 20 },
+          ],
+          intro: ["Un visage nouveau dans mon désert ! Voyons ce que tu vaux."],
+          defeat: ["Le sable ne t'a pas ralenti. Impressionnant."],
+          after: ["La montagne t'attend au nord. Couvre-toi."],
+        },
+      },
+      {
+        id: "chercheur-ali",
+        x: 7,
+        y: 6,
+        dir: "right",
+        sprite: "prof",
+        lines: ["J'étudie les Mascaïman. Fascinants, ces petits carnassiers."],
+        trainer: {
+          title: "Chercheur",
+          name: "Ali",
+          sight: 3,
+          reward: 760,
+          team: [{ id: 551, level: 20 }],
+          intro: ["Une donnée de plus pour mes travaux : affrontons-nous !"],
+          defeat: ["Résultat noté. Tu es au-dessus de la moyenne."],
+          after: ["Reviens me voir si tu captures un Mascaïman."],
+        },
+      },
+    ],
+    warps: [
+      { x: 9, y: 25, to: "aigueperse", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 25, to: "aigueperse", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "route6", tx: 9, ty: 22, dir: "up" },
+      { x: 10, y: 0, to: "route6", tx: 10, ty: 22, dir: "up" },
+    ],
+    signs: [
+      { x: 4, y: 24, text: ["ROUTE 5 — LES SABLES", "Ni ombre, ni eau. Avancez vite."] },
+    ],
+    encounters: [
+      { id: 551, min: 18, max: 21, weight: 40 },
+      { id: 557, min: 18, max: 21, weight: 25 },
+      { id: 505, min: 19, max: 22, weight: 20 },
+      { id: 510, min: 19, max: 22, weight: 15 },
+    ],
+  },
+
+  route6: {
+    name: "Route 6",
+    biome: "montagne",
+    tiles: [
+      "#########==#########",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##,,,,,..==..,,,,,##",
+      "##,,,,,..==..,,,,,##",
+      "##.......==.......##",
+      "##.#####.==.#####.##",
+      "##.#####.==.#####.##",
+      "##.......==.......##",
+      "##..,,,,,==,,,,,..##",
+      "##..,,,,,==,,,,,..##",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##,,,,...==...,,,,##",
+      "##,,,,...==...,,,,##",
+      "##.......==.......##",
+      "##.#####.==.#####.##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "alpiniste-yann",
+        x: 12,
+        y: 19,
+        dir: "left",
+        sprite: "gamin",
+        lines: ["L'air se raréfie mais la vue est splendide."],
+        trainer: {
+          title: "Alpiniste",
+          name: "Yann",
+          sight: 3,
+          reward: 1080,
+          team: [
+            { id: 529, level: 23 },
+            { id: 508, level: 24 },
+          ],
+          intro: ["On ne monte pas plus haut sans passer par moi !"],
+          defeat: ["Tu grimpes vite, dans tous les sens du terme."],
+          after: ["Mions est juste au-dessus. Le froid y mord."],
+        },
+      },
+      {
+        id: "guide-montagne",
+        x: 7,
+        y: 10,
+        dir: "right",
+        sprite: "exploratrice",
+        lines: ["Le sentier est balisé jusqu'à Mions. Ne t'en écarte pas."],
+        trainer: {
+          title: "Guide",
+          name: "Maud",
+          sight: 3,
+          reward: 960,
+          team: [{ id: 521, level: 24 }],
+          intro: ["Un dernier test avant le sommet !"],
+          defeat: ["Le sommet est à toi."],
+          after: ["Bon courage contre le Champion de Mions."],
+        },
+      },
+    ],
+    warps: [
+      { x: 9, y: 23, to: "route5", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 23, to: "route5", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "mions", tx: 9, ty: 18, dir: "up" },
+      { x: 10, y: 0, to: "mions", tx: 10, ty: 18, dir: "up" },
+    ],
+    signs: [
+      { x: 4, y: 22, text: ["ROUTE 6 — LA CRÊTE", "Mions au nord. Attention au verglas."] },
+    ],
+    encounters: [
+      { id: 529, min: 23, max: 26, weight: 35 },
+      { id: 557, min: 23, max: 26, weight: 25 },
+      { id: 508, min: 24, max: 27, weight: 20 },
+      { id: 521, min: 24, max: 27, weight: 20 },
+    ],
+  },
+
+  mions: {
+    name: "Mions",
+    biome: "montagne",
+    tiles: [
+      "####################",
+      "##.......==.......##",
+      "##..TTTT.==.TTTT..##",
+      "##..TTTT.==.TTTT..##",
+      "##..WWDW.==.WWDW..##",
+      "##.......==.......##",
+      "##..F....==....F..##",
+      "##.......==.......##",
+      "##.TTTTT.==.TTTTT.##",
+      "##.TTTTT.==.TTTTT.##",
+      "##.WWDWW.==.WWDWW.##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "##.......==.......##",
+      "##..TTT..==..TTT..##",
+      "##..WDW..==..WDW..##",
+      "##.......==.......##",
+      "##..,,,..==..,,,..##",
+      "##..,,,..==..,,,..##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "guide-mions",
+        x: 12,
+        y: 11,
+        dir: "left",
+        sprite: "villageois",
+        lines: [
+          "Mions, dernier village avant les cimes.",
+          "L'Arène d'Anthony est à droite. Il ouvre au feu et il finit à la foudre.",
+        ],
+      },
+      {
+        id: "ancienne-mions",
+        x: 5,
+        y: 6,
+        dir: "right",
+        sprite: "maman",
+        lines: [
+          "Trois insignes, et te voilà Dresseur accompli.",
+          "Repose-toi au Centre avant d'affronter Anthony.",
+        ],
+      },
+    ],
+    warps: [
+      { x: 9, y: 19, to: "route6", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 19, to: "route6", tx: 10, ty: 1, dir: "down" },
+      { x: 6, y: 4, to: "maison4", tx: 4, ty: 6, dir: "up" },
+      { x: 5, y: 10, to: "centre4", tx: 6, ty: 8, dir: "up" },
+      { x: 14, y: 10, to: "arene3", tx: 6, ty: 12, dir: "up" },
+    ],
+    signs: [
+      {
+        x: 4,
+        y: 12,
+        text: ["MIONS", "Le village le plus haut de la région."],
+      },
+      { x: 14, y: 4, text: ["Les volets sont clos pour l'hiver."] },
+      { x: 5, y: 15, text: ["Une cheminée fume, mais personne n'ouvre."] },
+      { x: 14, y: 15, text: ["Fermé. Une paire de skis est plantée dans la neige."] },
+    ],
+  },
+
+  centre4: {
+    name: "Centre Pokémon",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXXXX",
+      "X-CCC--CCC-X",
+      "X-CCC--CCC-X",
+      "X----------X",
+      "X-B------B-X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "infirmiere4",
+        x: 3,
+        y: 3,
+        dir: "down",
+        sprite: "infirmiere",
+        heals: true,
+        lines: [
+          "Bienvenue au Centre Pokémon de Mions !",
+          "Nous allons soigner vos Pokémon. Un instant, je vous prie…",
+        ],
+      },
+      {
+        id: "vendeur4",
+        x: 8,
+        y: 3,
+        dir: "down",
+        sprite: "vendeur",
+        shop: true,
+        lines: ["Bienvenue à la Boutique ! Que puis-je vous servir ?"],
+      },
+    ],
+    warps: [
+      { x: 5, y: 9, to: "mions", tx: 5, ty: 11, dir: "down" },
+      { x: 6, y: 9, to: "mions", tx: 5, ty: 11, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  arene3: {
+    name: "Arène de Mions",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXXXX",
+      "XEEEEEEEEEEX",
+      "XEEEEEEEEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "champion-anthony",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "championne",
+        lines: ["L'insigne Roc t'appartient. La montagne t'a adopté."],
+        trainer: {
+          title: "Champion",
+          name: "Anthony",
+          sight: 2,
+          reward: 3600,
+          badge: "roc",
+          team: [
+            { id: 500, level: 28 },
+            { id: 644, level: 15 },
+          ],
+          intro: [
+            "Je suis Anthony, Champion de Mions.",
+            "Le feu ouvre la voie, la foudre la referme.",
+            "Personne n'a encore vu mes deux Pokémon tomber le même jour.",
+          ],
+          defeat: ["Le feu s'éteint et la foudre se tait. Bien joué."],
+          after: [
+            "Reçois l'insigne Roc, taillé dans la pierre du sommet.",
+            "Trois insignes : la région entière connaît ton nom, désormais.",
+          ],
+        },
+      },
+      {
+        id: "mineur-gustave",
+        x: 3,
+        y: 7,
+        dir: "right",
+        sprite: "villageois",
+        lines: ["Le Champion ne s'affronte qu'après nous."],
+        trainer: {
+          title: "Mineur",
+          name: "Gustave",
+          sight: 3,
+          reward: 1240,
+          team: [{ id: 529, level: 24 }],
+          intro: ["La piste est à moi. Prouve-moi le contraire !"],
+          defeat: ["Bien creusé."],
+          after: ["Anthony va te donner du fil à retordre."],
+        },
+      },
+      {
+        id: "grimpeuse-lise",
+        x: 8,
+        y: 5,
+        dir: "left",
+        sprite: "exploratrice",
+        lines: ["Deux insignes déjà ? Alors ce sera un vrai combat."],
+        trainer: {
+          title: "Grimpeuse",
+          name: "Lise",
+          sight: 3,
+          reward: 1160,
+          team: [{ id: 508, level: 25 }],
+          intro: ["Dernier verrou avant le Champion !"],
+          defeat: ["Passe. Tu l'as mérité."],
+          after: ["Il t'attend au fond de la piste."],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "mions", tx: 14, ty: 11, dir: "down" },
+      { x: 6, y: 13, to: "mions", tx: 14, ty: 11, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  maison4: {
+    name: "Maison de Mions",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXX",
+      "X-BB---B-X",
+      "X--------X",
+      "X--------X",
+      "X-B------X",
+      "X--------X",
+      "X--------X",
+      "XXXXDDXXXX",
+    ],
+    npcs: [
+      {
+        id: "habitant4",
+        x: 6,
+        y: 2,
+        dir: "down",
+        sprite: "villageois",
+        lines: [
+          "Anthony n'a jamais perdu contre un Dresseur pressé.",
+          "Entraîne-toi sur la crête avant de frapper à sa porte.",
+        ],
+      },
+    ],
+    warps: [
+      { x: 4, y: 7, to: "mions", tx: 6, ty: 5, dir: "down" },
+      { x: 5, y: 7, to: "mions", tx: 6, ty: 5, dir: "down" },
     ],
     signs: [],
   },
 };
+
+/* ------------------------------------------------- la carte de la région */
+
+export type RegionNode = {
+  map: MapId;
+  label: string;
+  short: string;
+  kind: "ville" | "route";
+  biome: Biome;
+  /** Position sur la carte, en pourcentage de sa surface. */
+  x: number;
+  y: number;
+  /** Intérieurs rattachés : on y est toujours « dans » ce lieu. */
+  inside?: MapId[];
+};
+
+/**
+ * L'itinéraire du sud au nord, tel qu'il apparaît sur la carte. L'ordre fait
+ * foi : les liaisons sont tracées d'un nœud au suivant.
+ */
+export const REGION: RegionNode[] = [
+  { map: "bourg", label: "Renouet Bourg", short: "Renouet", kind: "ville", biome: "plaine", x: 16, y: 92, inside: ["maison"] },
+  { map: "route1", label: "Route 1", short: "R1", kind: "route", biome: "plaine", x: 16, y: 79 },
+  { map: "route2", label: "Route 2", short: "R2", kind: "route", biome: "plaine", x: 29, y: 71, inside: ["centre"] },
+  { map: "route3", label: "Route 3", short: "R3", kind: "route", biome: "plaine", x: 22, y: 60 },
+  { map: "maillard", label: "Maillard", short: "Maillard", kind: "ville", biome: "plaine", x: 37, y: 51, inside: ["centre2", "arene", "velo", "maison2"] },
+  { map: "route4", label: "Route 4", short: "R4", kind: "route", biome: "foret", x: 53, y: 56 },
+  { map: "aigueperse", label: "Aigueperse", short: "Aigueperse", kind: "ville", biome: "foret", x: 65, y: 45, inside: ["centre3", "arene2", "maison3"] },
+  { map: "route5", label: "Route 5", short: "R5", kind: "route", biome: "desert", x: 79, y: 34 },
+  { map: "route6", label: "Route 6", short: "R6", kind: "route", biome: "montagne", x: 66, y: 21 },
+  { map: "mions", label: "Mions", short: "Mions", kind: "ville", biome: "montagne", x: 80, y: 9, inside: ["centre4", "arene3", "maison4"] },
+];
+
+/** Nœud de la carte où se trouve le joueur, intérieurs compris. */
+export const regionNodeOf = (map: MapId): RegionNode | null =>
+  REGION.find((node) => node.map === map || node.inside?.includes(map)) ?? null;
 
 /* --------------------------------------------------------------- accès */
 

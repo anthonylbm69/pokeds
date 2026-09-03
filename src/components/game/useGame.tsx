@@ -44,6 +44,7 @@ import {
 } from "@/lib/game/state";
 import type { DsButton, ModeParts } from "../DSConsole";
 import BattleView from "./BattleView";
+import RegionMap from "./RegionMap";
 import TouchPanel, { type Choice } from "./TouchPanel";
 import WorldView, { newPlayer, type PlayerPos } from "./WorldView";
 
@@ -82,6 +83,7 @@ type Phase =
   | { kind: "world" }
   | { kind: "text"; lines: string[]; i: number; then: Then | null }
   | { kind: "starter" }
+  | { kind: "carte" }
   | { kind: "shop"; counter: Counter; message: string | null }
   | { kind: "battle"; ui: BattleUi };
 
@@ -674,6 +676,15 @@ export function useGame({
       };
     }
 
+    if (phase.kind === "carte") {
+      return {
+        title: "Carte de la région",
+        hint: "B ou START pour refermer",
+        layout: "row",
+        list: [{ id: "leave", label: "REFERMER", tone: "back" }],
+      };
+    }
+
     if (phase.kind === "shop") {
       const owned = (id: string) =>
         id === "ball"
@@ -725,6 +736,7 @@ export function useGame({
         : "Croix pour marcher · B pour courir · A pour interagir",
       layout: "row",
       list: [
+        { id: "carte", label: "CARTE", sub: "START" },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
         { id: "music", label: "MUSIQUE", sub: game.music ? "activée" : "coupée" },
@@ -816,8 +828,14 @@ export function useGame({
         return;
       }
 
+      if (phase.kind === "carte") {
+        setPhase({ kind: "world" });
+        return;
+      }
+
       if (phase.kind === "world") {
-        if (choice.id === "dex") onOpenDex();
+        if (choice.id === "carte") setPhase({ kind: "carte" });
+        else if (choice.id === "dex") onOpenDex();
         else if (choice.id === "save") save();
         else if (choice.id === "music") setGame((g) => ({ ...g, music: !g.music }));
         else if (choice.id === "title") onExit();
@@ -897,10 +915,17 @@ export function useGame({
           return;
         }
 
+        case "carte":
+          if (button === "a" || button === "b" || button === "start") {
+            setPhase({ kind: "world" });
+          }
+          return;
+
         case "world":
           if (button === "a") interact();
           else if (button === "x") save();
           else if (button === "y") onOpenDex();
+          else if (button === "start") setPhase({ kind: "carte" });
           else if (button === "l" || button === "r") toggleBike();
           else if (button === "select") onExit();
           return;
@@ -985,6 +1010,8 @@ export function useGame({
         </div>
       );
     }
+
+    if (phase.kind === "carte") return <RegionMap current={game.map} />;
 
     if (phase.kind === "battle") {
       const foeTrainer =

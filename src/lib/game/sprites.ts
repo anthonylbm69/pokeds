@@ -4,7 +4,7 @@
  * pose est rendue une fois dans un canevas hors écran, puis recopiée.
  */
 
-import type { Dir, NpcSprite, TileKind } from "./world";
+import type { Biome, Dir, NpcSprite, TileKind } from "./world";
 
 /** Une case du décor à l'écran (16 px de la DS, doublés). */
 export const TILE = 32;
@@ -259,7 +259,64 @@ export function drawBike(ctx: CanvasRenderingContext2D, x: number, y: number): v
 
 /* --------------------------------------------------------------- décors */
 
-type Painter = (ctx: CanvasRenderingContext2D, v: number) => void;
+/**
+ * Chaque région a sa gamme : le sol, les herbes hautes, les arbres et les
+ * chemins prennent les couleurs du biome traversé. Le bâti, lui, ne change
+ * pas — une maison reste une maison.
+ */
+type Ground = {
+  base: string;
+  alt: string;
+  speck: string;
+  tallBase: string;
+  tallBlade: string;
+  tallDark: string;
+  tallEdge: string;
+  trunk: string;
+  canopy: string;
+  canopyLight: string;
+  canopyHigh: string;
+  canopyDark: string;
+  path: string;
+  pathEdge: string;
+  pathSpeck: string;
+};
+
+const BIOMES: Record<Biome, Ground> = {
+  plaine: {
+    base: "#79b25e", alt: "#8cc06d", speck: "#5f9a49",
+    tallBase: "#4e8c43", tallBlade: "#6aa955", tallDark: "#2f6b34", tallEdge: "#3b7539",
+    trunk: "#6b4a2c", canopy: "#2f6b3a", canopyLight: "#3f8449",
+    canopyHigh: "#58a05c", canopyDark: "#22522c",
+    path: "#d6c49b", pathEdge: "#c9b489", pathSpeck: "#c2ac80",
+  },
+  foret: {
+    base: "#4e7a45", alt: "#5c8a4f", speck: "#3c6236",
+    tallBase: "#33602f", tallBlade: "#4a8040", tallDark: "#1f4322", tallEdge: "#27512a",
+    trunk: "#4a3520", canopy: "#1f4d2a", canopyLight: "#2c6236",
+    canopyHigh: "#3f7a45", canopyDark: "#143a1e",
+    path: "#a08a63", pathEdge: "#907a55", pathSpeck: "#87724f",
+  },
+  desert: {
+    base: "#e0cd9a", alt: "#ead9ad", speck: "#cbb480",
+    tallBase: "#c4a86a", tallBlade: "#d8bd80", tallDark: "#a68b52", tallEdge: "#b09660",
+    trunk: "#6b5a3a", canopy: "#4f8c53", canopyLight: "#62a464",
+    canopyHigh: "#7dbb7a", canopyDark: "#376b3c",
+    path: "#d9bb84", pathEdge: "#c9a870", pathSpeck: "#bf9d66",
+  },
+  montagne: {
+    base: "#9aa79b", alt: "#a9b5a8", speck: "#7f8d82",
+    tallBase: "#6f8470", tallBlade: "#8aa08a", tallDark: "#55684f", tallEdge: "#5f7359",
+    trunk: "#4a3f34", canopy: "#2c4a3a", canopyLight: "#3a5c48",
+    canopyHigh: "#e8eef0", canopyDark: "#1f3529",
+    path: "#b0aca0", pathEdge: "#9c988c", pathSpeck: "#928e83",
+  },
+};
+
+type Painter = (ctx: CanvasRenderingContext2D, v: number, g: Ground) => void;
+
+/** Tuiles dont la teinte suit la région ; les autres sont identiques partout. */
+const REGIONAL = new Set<TileKind>(["grass", "tall", "path", "tree", "flower", "sign"]);
 
 const px = (ctx: CanvasRenderingContext2D, color: string, x: number, y: number, w = 1, h = 1) => {
   ctx.fillStyle = color;
@@ -275,53 +332,53 @@ const fill = (ctx: CanvasRenderingContext2D, color: string) => {
 const speck = (v: number, i: number) => (v * 7 + i * 13) % 16;
 
 const PAINTERS: Record<TileKind, Painter> = {
-  grass: (ctx, v) => {
-    fill(ctx, "#79b25e");
-    px(ctx, "#8cc06d", 0, 0, 8, 8);
-    px(ctx, "#8cc06d", 8, 8, 8, 8);
+  grass: (ctx, v, g) => {
+    fill(ctx, g.base);
+    px(ctx, g.alt, 0, 0, 8, 8);
+    px(ctx, g.alt, 8, 8, 8, 8);
     for (let i = 0; i < 5; i++) {
-      px(ctx, "#5f9a49", speck(v, i), speck(v, i + 3));
-      px(ctx, "#5f9a49", speck(v, i + 1), speck(v, i + 5));
+      px(ctx, g.speck, speck(v, i), speck(v, i + 3));
+      px(ctx, g.speck, speck(v, i + 1), speck(v, i + 5));
     }
   },
-  tall: (ctx, v) => {
-    fill(ctx, "#4e8c43");
+  tall: (ctx, v, g) => {
+    fill(ctx, g.tallBase);
     const sway = v % 2;
     for (let i = 0; i < 3; i++) {
       const bx = 1 + i * 5 + sway;
-      px(ctx, "#2f6b34", bx, 9, 3, 6);
-      px(ctx, "#6aa955", bx, 6, 1, 4);
-      px(ctx, "#6aa955", bx + 2, 5, 1, 5);
-      px(ctx, "#2a5c2d", bx, 14, 3, 2);
+      px(ctx, g.tallDark, bx, 9, 3, 6);
+      px(ctx, g.tallBlade, bx, 6, 1, 4);
+      px(ctx, g.tallBlade, bx + 2, 5, 1, 5);
+      px(ctx, g.tallDark, bx, 14, 3, 2);
     }
-    px(ctx, "#3b7539", 0, 15, 16, 1);
+    px(ctx, g.tallEdge, 0, 15, 16, 1);
   },
-  path: (ctx, v) => {
-    fill(ctx, "#d6c49b");
-    px(ctx, "#c9b489", 0, 0, 16, 1);
-    for (let i = 0; i < 6; i++) px(ctx, "#c2ac80", speck(v, i), speck(v, i + 7));
+  path: (ctx, v, g) => {
+    fill(ctx, g.path);
+    px(ctx, g.pathEdge, 0, 0, 16, 1);
+    for (let i = 0; i < 6; i++) px(ctx, g.pathSpeck, speck(v, i), speck(v, i + 7));
   },
-  flower: (ctx, v) => {
-    fill(ctx, "#79b25e");
-    px(ctx, "#8cc06d", 0, 0, 8, 8);
-    px(ctx, "#8cc06d", 8, 8, 8, 8);
+  flower: (ctx, v, g) => {
+    fill(ctx, g.base);
+    px(ctx, g.alt, 0, 0, 8, 8);
+    px(ctx, g.alt, 8, 8, 8, 8);
     const color = ["#e8615f", "#f0c24a", "#e5789f", "#c98ae8"][v % 4];
     // Deux touffes fleuries, assez larges pour se voir à l'échelle du jeu.
     for (const [fx, fy] of [
       [3, 4],
       [9, 9],
     ]) {
-      px(ctx, "#4f8c43", fx + 2, fy + 3, 1, 3);
+      px(ctx, g.speck, fx + 2, fy + 3, 1, 3);
       px(ctx, color, fx + 1, fy + 1, 3, 1);
       px(ctx, color, fx + 2, fy, 1, 3);
       px(ctx, "#fff3c4", fx + 2, fy + 1);
     }
   },
 
-  sign: (ctx, v) => {
-    fill(ctx, "#79b25e");
-    px(ctx, "#8cc06d", 0, 0, 8, 8);
-    px(ctx, "#8cc06d", 8, 8, 8, 8);
+  sign: (ctx, v, g) => {
+    fill(ctx, g.base);
+    px(ctx, g.alt, 0, 0, 8, 8);
+    px(ctx, g.alt, 8, 8, 8, 8);
     px(ctx, "#4a3520", 7, 10, 2, 6);
     px(ctx, "#4a3520", 2, 2, 12, 9);
     px(ctx, "#9a7248", 3, 3, 10, 7);
@@ -329,16 +386,16 @@ const PAINTERS: Record<TileKind, Painter> = {
     px(ctx, "#5c4326", 4, 6, 8, 1);
     px(ctx, "#5c4326", 4, 8, v % 2 ? 5 : 8, 1);
   },
-  tree: (ctx, v) => {
-    fill(ctx, "#79b25e");
-    px(ctx, "#6b4a2c", 7, 11, 2, 5);
-    px(ctx, "#2f6b3a", 2, 1, 12, 11);
-    px(ctx, "#3f8449", 3, 2, 10, 5);
-    px(ctx, "#58a05c", 4, 2, 5, 3);
-    px(ctx, "#22522c", 2, 9, 12, 3);
-    px(ctx, "#22522c", 1, 3, 1, 6);
-    px(ctx, "#22522c", 14, 3, 1, 6);
-    if (v % 2) px(ctx, "#58a05c", 9, 4, 3, 2);
+  tree: (ctx, v, g) => {
+    fill(ctx, g.base);
+    px(ctx, g.trunk, 7, 11, 2, 5);
+    px(ctx, g.canopy, 2, 1, 12, 11);
+    px(ctx, g.canopyLight, 3, 2, 10, 5);
+    px(ctx, g.canopyHigh, 4, 2, 5, 3);
+    px(ctx, g.canopyDark, 2, 9, 12, 3);
+    px(ctx, g.canopyDark, 1, 3, 1, 6);
+    px(ctx, g.canopyDark, 14, 3, 1, 6);
+    if (v % 2) px(ctx, g.canopyHigh, 9, 4, 3, 2);
   },
   water: (ctx, v) => {
     fill(ctx, "#3b78c4");
@@ -396,6 +453,30 @@ const PAINTERS: Record<TileKind, Painter> = {
     px(ctx, "#a87e4c", 0, 12, 16, 4);
     px(ctx, "#8a6540", 0, 15, 16, 1);
   },
+  /* -------------------------------------------------------- les arènes */
+
+  // Terrain de combat : argile battue et lignes blanches réglementaires.
+  arena: (ctx, v) => {
+    fill(ctx, "#c98f5e");
+    px(ctx, "#d49b68", 0, 0, 16, 8);
+    for (let i = 0; i < 4; i++) px(ctx, "#b87f50", speck(v, i), speck(v, i + 5));
+    px(ctx, "#f4efe4", 0, 0, 16, 1);
+    px(ctx, "#f4efe4", 0, 0, 1, 16);
+  },
+
+  // Gradins : rangées de sièges et taches de public.
+  stands: (ctx, v) => {
+    fill(ctx, "#3a4150");
+    for (let y = 0; y < 16; y += 5) {
+      px(ctx, "#4c5567", 0, y, 16, 3);
+      px(ctx, "#262c38", 0, y + 3, 16, 2);
+      const tint = ["#e0655c", "#e8c25a", "#5fa8e0", "#7ecb84"];
+      for (let i = 0; i < 3; i++) {
+        px(ctx, tint[(v + i + y) % 4], 1 + i * 5 + (v % 2), y, 3, 2);
+      }
+    }
+  },
+
   furniture: (ctx, v) => {
     fill(ctx, "#e8dfd0");
     if (v % 2) {
@@ -412,11 +493,15 @@ const PAINTERS: Record<TileKind, Painter> = {
   },
 };
 
-/** Quatre variantes par tuile : de quoi éviter l'effet damier. */
-const tiles = new Map<TileKind, HTMLCanvasElement>();
+/**
+ * Quatre variantes par tuile, de quoi éviter l'effet damier. Les tuiles de
+ * décor sont déclinées par région ; le bâti n'est peint qu'une fois.
+ */
+const tiles = new Map<string, HTMLCanvasElement>();
 
-function tileSheet(kind: TileKind): HTMLCanvasElement {
-  const cached = tiles.get(kind);
+function tileSheet(kind: TileKind, biome: Biome): HTMLCanvasElement {
+  const key = REGIONAL.has(kind) ? `${kind}:${biome}` : kind;
+  const cached = tiles.get(key);
   if (cached) return cached;
 
   const sheet = canvas(TILE * 4, TILE);
@@ -427,10 +512,10 @@ function tileSheet(kind: TileKind): HTMLCanvasElement {
     ctx.beginPath();
     ctx.rect(0, 0, TILE, TILE);
     ctx.clip();
-    PAINTERS[kind](ctx, v);
+    PAINTERS[kind](ctx, v, BIOMES[biome]);
     ctx.restore();
   }
-  tiles.set(kind, sheet);
+  tiles.set(key, sheet);
   return sheet;
 }
 
@@ -440,8 +525,9 @@ export function drawTile(
   variant: number,
   x: number,
   y: number,
+  biome: Biome = "plaine",
 ): void {
-  const sheet = tileSheet(kind);
+  const sheet = tileSheet(kind, biome);
   ctx.drawImage(sheet, (variant % 4) * TILE, 0, TILE, TILE, x, y, TILE, TILE);
 }
 

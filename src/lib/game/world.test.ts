@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { SPECIES } from "./data";
 import {
   MAPS,
+  REGION,
   STEP,
   TILES,
+  regionNodeOf,
   seesPlayer,
   tileAt,
   walkable,
@@ -92,6 +94,50 @@ describe("les liaisons entre cartes", () => {
       for (const warp of map.warps) {
         const back = MAPS[warp.to].warps.find((w) => w.to === id);
         expect(back, `${id} → ${warp.to} sans retour`).toBeDefined();
+      }
+    }
+  });
+});
+
+describe("la carte de la région", () => {
+  it("ne cite que des lieux existants, bien placés", () => {
+    for (const node of REGION) {
+      expect(MAPS[node.map], `${node.label} : carte inconnue`).toBeDefined();
+      expect(node.x).toBeGreaterThan(0);
+      expect(node.x).toBeLessThan(100);
+      expect(node.y).toBeGreaterThan(0);
+      expect(node.y).toBeLessThan(100);
+      for (const inside of node.inside ?? []) {
+        expect(MAPS[inside], `${node.label} : intérieur ${inside} inconnu`).toBeDefined();
+      }
+    }
+  });
+
+  it("relie des lieux réellement voisins", () => {
+    // Deux nœuds consécutifs de la carte doivent l'être aussi dans le monde.
+    for (let i = 1; i < REGION.length; i++) {
+      const from = MAPS[REGION[i - 1].map];
+      const to = REGION[i].map;
+      expect(
+        from.warps.some((w) => w.to === to),
+        `${REGION[i - 1].label} → ${REGION[i].label} : aucun passage`,
+      ).toBe(true);
+    }
+  });
+
+  it("situe chaque carte extérieure et chaque intérieur", () => {
+    for (const [id, map] of maps) {
+      const node = regionNodeOf(id);
+      expect(node, `${map.name} (${id}) absent de la carte`).not.toBeNull();
+    }
+  });
+
+  it("ne range un intérieur que dans un seul lieu", () => {
+    const seen = new Set<MapId>();
+    for (const node of REGION) {
+      for (const inside of node.inside ?? []) {
+        expect(seen.has(inside), `${inside} rattaché deux fois`).toBe(false);
+        seen.add(inside);
       }
     }
   });

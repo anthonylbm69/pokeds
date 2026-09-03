@@ -110,6 +110,15 @@ const MOVE_DATA = {
   "coupe-vent": { name: "Coupe-Vent", type: "flying", category: "speciale", power: 60, accuracy: 95, pp: 25 },
   balayage: { name: "Balayage", type: "fighting", category: "physique", power: 65, accuracy: 100, pp: 20 },
   vibrobscur: { name: "Vibrobscur", type: "dark", category: "physique", power: 70, accuracy: 100, pp: 15 },
+
+  // Les biomes du nord amènent leurs propres types.
+  tunnel: { name: "Tunnel", type: "ground", category: "physique", power: 80, accuracy: 100, pp: 10 },
+  "jet-pierres": { name: "Jet-Pierres", type: "rock", category: "physique", power: 50, accuracy: 90, pp: 15 },
+  piqure: { name: "Piqûre", type: "bug", category: "physique", power: 60, accuracy: 100, pp: 20 },
+
+  // De quoi armer les légendaires des Arènes.
+  "draco-souffle": { name: "Draco-Souffle", type: "dragon", category: "speciale", power: 60, accuracy: 100, pp: 20 },
+  eclair: { name: "Éclair", type: "electric", category: "speciale", power: 40, accuracy: 100, pp: 30 },
 } as const satisfies Record<string, Move>;
 
 export type MoveId = keyof typeof MOVE_DATA;
@@ -238,6 +247,76 @@ export const SPECIES: Record<number, Species> = {
     entry: "Il suit son Dresseur docilement. Comme il oublie souvent les ordres, on lui répète sans cesse la même chose.",
     evolvesAt: 21,
     evolvesInto: 520,
+  },
+
+  /* --------------------------------- espèces des forêts, sables et cimes */
+
+  529: {
+    id: 529, name: "Rototaupe", genus: "Pokémon Taupe", types: ["ground"],
+    base: { hp: 60, atk: 85, def: 40, spa: 30, spd: 45, spe: 68 },
+    catchRate: 120, baseExp: 66,
+    learnset: [
+      { level: 1, move: "griffe" },
+      { level: 5, move: "jet-de-sable" },
+      { level: 12, move: "tunnel" },
+      { level: 18, move: "jet-pierres" },
+      { level: 26, move: "plaquage" },
+    ],
+    entry: "Il creuse des galeries à dix mètres sous terre. Ses griffes viennent à bout de la roche la plus dure.",
+  },
+  551: {
+    id: 551, name: "Mascaïman", genus: "Pokémon Croco", types: ["ground", "dark"],
+    base: { hp: 50, atk: 72, def: 35, spa: 35, spd: 35, spe: 65 },
+    catchRate: 180, baseExp: 58,
+    learnset: [
+      { level: 1, move: "morsure" },
+      { level: 4, move: "jet-de-sable" },
+      { level: 14, move: "tunnel" },
+      { level: 20, move: "vibrobscur" },
+      { level: 28, move: "plaquage" },
+    ],
+    entry: "Enfoui dans le sable, il ne laisse dépasser que ses yeux et guette sa proie pendant des heures.",
+  },
+  557: {
+    id: 557, name: "Crabicoque", genus: "Pokémon Roche", types: ["bug", "rock"],
+    base: { hp: 50, atk: 65, def: 85, spa: 35, spd: 35, spe: 55 },
+    catchRate: 190, baseExp: 65,
+    learnset: [
+      { level: 1, move: "griffe" },
+      { level: 8, move: "jet-pierres" },
+      { level: 14, move: "piqure" },
+      { level: 22, move: "plaquage" },
+    ],
+    entry: "Il taille sa roche avec le liquide de sa bouche et s'y installe. Sans elle, il ne trouve plus le sommeil.",
+  },
+
+  /* ---------------------------------------- les légendaires des Arènes */
+
+  384: {
+    id: 384, name: "Rayquaza", genus: "Pokémon Ciel Haut", types: ["dragon", "flying"],
+    base: { hp: 105, atk: 150, def: 90, spa: 150, spd: 90, spe: 95 },
+    catchRate: 45, baseExp: 306,
+    learnset: [
+      { level: 1, move: "tornade" },
+      { level: 1, move: "groz-yeux" },
+      { level: 8, move: "draco-souffle" },
+      { level: 16, move: "coupe-vent" },
+      { level: 28, move: "plaquage" },
+    ],
+    entry: "Il vit dans la couche d'ozone, bien au-dessus des nuages, et n'en redescend presque jamais.",
+  },
+  644: {
+    id: 644, name: "Zekrom", genus: "Pokémon Noirprofond", types: ["dragon", "electric"],
+    base: { hp: 100, atk: 150, def: 120, spa: 120, spd: 100, spe: 90 },
+    catchRate: 3, baseExp: 306,
+    learnset: [
+      { level: 1, move: "morsure" },
+      { level: 1, move: "groz-yeux" },
+      { level: 10, move: "eclair" },
+      { level: 20, move: "draco-souffle" },
+      { level: 30, move: "plaquage" },
+    ],
+    entry: "Dissimulé dans les nuages d'orage, il prête main-forte à qui poursuit ses idéaux. Sa queue produit une électricité colossale.",
   },
 
   /* ------------------------------------------------------ formes évoluées */

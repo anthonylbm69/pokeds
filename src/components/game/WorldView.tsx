@@ -176,6 +176,7 @@ export default function WorldView({
             variantFor(tile.kind, x, y, anim),
             x * TILE - camX,
             y * TILE - camY,
+            map.biome,
           );
         }
       }
@@ -208,7 +209,7 @@ export default function WorldView({
           ctx.beginPath();
           ctx.rect(sx, sy + 20, TILE, 12);
           ctx.clip();
-          drawTile(ctx, "tall", variantFor("tall", x, y, anim), sx, sy);
+          drawTile(ctx, "tall", variantFor("tall", x, y, anim), sx, sy, map.biome);
           ctx.restore();
         }
       }

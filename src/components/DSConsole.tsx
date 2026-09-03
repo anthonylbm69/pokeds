@@ -85,11 +85,10 @@ const DALLE_W = 512;
 const COMPACT_BELOW = 0.78;
 
 /**
- * Sous cette hauteur de fenêtre, deux dalles côte à côte deviennent trop
- * petites pour qu'on y lise quoi que ce soit : la console n'en montre plus
- * qu'une, celle où se joue l'action.
+ * En dessous de cette hauteur, même une seule dalle ne laisse plus la place
+ * aux commandes : mieux vaut demander de tourner l'appareil.
  */
-const SINGLE_BELOW = 780;
+const ROTATE_BELOW = 500;
 
 /**
  * La coque : deux dalles empilées, les commandes de part et d'autre de l'écran
@@ -111,9 +110,14 @@ export default function DSConsole({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
-  /** Disposition tenant tout l'écran, pour téléphone et petites fenêtres. */
+  /**
+   * Disposition tenant tout l'écran, pour téléphone et petites fenêtres :
+   * une seule dalle à la fois, comme sur une portable à écran unique, et des
+   * commandes assez grandes pour le pouce. La coque à deux dalles reste
+   * réservée aux écrans qui peuvent l'afficher en grand.
+   */
   const [compact, setCompact] = useState(false);
-  const [single, setSingle] = useState(false);
+  const [cramped, setCramped] = useState(false);
   const [portrait, setPortrait] = useState(true);
   const [glass, setGlass] = useState(1);
 
@@ -159,7 +163,7 @@ export default function DSConsole({
         Math.min((vw - 28) / DESIGN_W, (vh - 56) / DESIGN_H) < COMPACT_BELOW;
 
       setCompact(small);
-      setSingle(small && vh < SINGLE_BELOW);
+      setCramped(vh < ROTATE_BELOW);
       setPortrait(vh >= vw);
 
       if (small) {
@@ -364,8 +368,7 @@ export default function DSConsole({
         "ds",
         dragging && "is-dragging",
         compact && "ds--compact",
-        single && "ds--single",
-        single && `ds--show-${shown}`,
+        compact && `ds--show-${shown}`,
       ]
         .filter(Boolean)
         .join(" ")}
@@ -378,11 +381,11 @@ export default function DSConsole({
         ["--glass-scale" as string]: glass,
       }}
     >
-      {compact && !portrait && (
+      {compact && !portrait && cramped && (
         <p className="ds__rotate">
           <span aria-hidden="true">⟳</span>
-          Tournez l&apos;appareil : la console à deux dalles se joue à la
-          verticale.
+          Tournez l&apos;appareil : à l&apos;horizontale, il ne reste pas assez
+          de hauteur pour la dalle et les commandes.
         </p>
       )}
 
@@ -404,8 +407,8 @@ export default function DSConsole({
 
       {/* ------------------------------------------------------- charnière */}
       <div className="ds__hinge" {...grab}>
-        {single ? (
-          // Une seule dalle tient : la charnière devient le sélecteur.
+        {compact ? (
+          // Une seule dalle à l'écran : la charnière devient le sélecteur.
           <span className="ds__tabs" role="tablist" aria-label="Choisir la dalle">
             {(["top", "bottom"] as const).map((which) => (
               <button
