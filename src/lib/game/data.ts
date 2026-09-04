@@ -5,6 +5,7 @@
  */
 
 import { DEX, EVOLUTIONS, type DexEntry } from "./dex";
+import type { Status } from "./battle";
 
 export type TypeName =
   | "normal"
@@ -86,6 +87,11 @@ export type Move = {
   priority?: number;
   /** Baisse une statistique de l'adversaire de `stages` crans. */
   lower?: { stat: Exclude<StatKey, "hp"> | "acc"; stages: number };
+  /**
+   * Altération posée sur la cible. Une attaque de statut la pose à coup sûr
+   * si la cible est réceptive ; une attaque offensive la tire à `chance`.
+   */
+  inflicts?: { status: Status; chance: number };
 };
 
 const MOVE_DATA = {
@@ -95,7 +101,7 @@ const MOVE_DATA = {
   morsure: { name: "Morsure", type: "dark", category: "physique", power: 60, accuracy: 100, pp: 25 },
   "fouet-lianes": { name: "Fouet Lianes", type: "grass", category: "physique", power: 35, accuracy: 100, pp: 25 },
   "tranch-herbe": { name: "Tranch'Herbe", type: "grass", category: "physique", power: 55, accuracy: 95, pp: 25 },
-  flammeche: { name: "Flammèche", type: "fire", category: "speciale", power: 40, accuracy: 100, pp: 25 },
+  flammeche: { name: "Flammèche", type: "fire", category: "speciale", power: 40, accuracy: 100, pp: 25, inflicts: { status: "brulure", chance: 0.1 } },
   "pistolet-a-o": { name: "Pistolet à O", type: "water", category: "speciale", power: 40, accuracy: 100, pp: 25 },
   picpic: { name: "Picpic", type: "flying", category: "physique", power: 35, accuracy: 100, pp: 35 },
   tornade: { name: "Tornade", type: "flying", category: "speciale", power: 40, accuracy: 100, pp: 35 },
@@ -107,7 +113,7 @@ const MOVE_DATA = {
   // Attaques des formes évoluées : de quoi rendre une montée de niveau utile.
   plaquage: { name: "Plaquage", type: "normal", category: "physique", power: 85, accuracy: 100, pp: 15 },
   "lame-feuille": { name: "Lame Feuille", type: "grass", category: "physique", power: 90, accuracy: 100, pp: 15 },
-  "lance-flammes": { name: "Lance-Flammes", type: "fire", category: "speciale", power: 90, accuracy: 100, pp: 15 },
+  "lance-flammes": { name: "Lance-Flammes", type: "fire", category: "speciale", power: 90, accuracy: 100, pp: 15, inflicts: { status: "brulure", chance: 0.1 } },
   "coquille-lame": { name: "Coquille Lame", type: "water", category: "physique", power: 75, accuracy: 95, pp: 10 },
   "coupe-vent": { name: "Coupe-Vent", type: "flying", category: "speciale", power: 60, accuracy: 95, pp: 25 },
   balayage: { name: "Balayage", type: "fighting", category: "physique", power: 65, accuracy: 100, pp: 20 },
@@ -120,26 +126,26 @@ const MOVE_DATA = {
 
   // De quoi armer les légendaires des Arènes.
   "draco-souffle": { name: "Draco-Souffle", type: "dragon", category: "speciale", power: 60, accuracy: 100, pp: 20 },
-  eclair: { name: "Éclair", type: "electric", category: "speciale", power: 40, accuracy: 100, pp: 30 },
+  eclair: { name: "Éclair", type: "electric", category: "speciale", power: 40, accuracy: 100, pp: 30, inflicts: { status: "paralysie", chance: 0.1 } },
 
   // Les hautes herbes recrachent les six cent quarante-neuf premières espèces :
   // les six types qui n'avaient encore aucune attaque en méritaient une.
   "vent-glace": { name: "Vent Glace", type: "ice", category: "speciale", power: 55, accuracy: 95, pp: 15, lower: { stat: "spe", stages: 1 } },
-  blizzard: { name: "Blizzard", type: "ice", category: "speciale", power: 110, accuracy: 70, pp: 5 },
+  blizzard: { name: "Blizzard", type: "ice", category: "speciale", power: 110, accuracy: 70, pp: 5, inflicts: { status: "gel", chance: 0.1 } },
   "choc-mental": { name: "Choc Mental", type: "psychic", category: "speciale", power: 50, accuracy: 100, pp: 25 },
   psyko: { name: "Psyko", type: "psychic", category: "speciale", power: 90, accuracy: 100, pp: 10 },
   "griffe-ombre": { name: "Griffe Ombre", type: "ghost", category: "physique", power: 70, accuracy: 100, pp: 15 },
   "griffe-acier": { name: "Griffe Acier", type: "steel", category: "physique", power: 50, accuracy: 95, pp: 35 },
   "tete-de-fer": { name: "Tête de Fer", type: "steel", category: "physique", power: 80, accuracy: 100, pp: 15 },
-  acide: { name: "Acide", type: "poison", category: "speciale", power: 40, accuracy: 100, pp: 30, lower: { stat: "spd", stages: 1 } },
-  "direct-toxik": { name: "Direct Toxik", type: "poison", category: "physique", power: 80, accuracy: 100, pp: 20 },
+  acide: { name: "Acide", type: "poison", category: "speciale", power: 40, accuracy: 100, pp: 30, inflicts: { status: "poison", chance: 0.2 } },
+  "direct-toxik": { name: "Direct Toxik", type: "poison", category: "physique", power: 80, accuracy: 100, pp: 20, inflicts: { status: "poison", chance: 0.3 } },
   "voix-enjoleuse": { name: "Voix Enjôleuse", type: "fairy", category: "speciale", power: 40, accuracy: 100, pp: 15 },
   "eclat-magique": { name: "Éclat Magique", type: "fairy", category: "speciale", power: 80, accuracy: 100, pp: 10 },
 
   // Les paliers hauts des types déjà servis, pour que les espèces engendrées
   // ne restent pas armées d'une Flammèche au niveau cinquante.
   hydrocanon: { name: "Hydrocanon", type: "water", category: "speciale", power: 110, accuracy: 80, pp: 5 },
-  "tonnerre-eclair": { name: "Tonnerre", type: "electric", category: "speciale", power: 90, accuracy: 100, pp: 15 },
+  "tonnerre-eclair": { name: "Tonnerre", type: "electric", category: "speciale", power: 90, accuracy: 100, pp: 15, inflicts: { status: "paralysie", chance: 0.1 } },
   "eboulement": { name: "Éboulement", type: "rock", category: "physique", power: 75, accuracy: 90, pp: 10 },
   "ultimapoing": { name: "Ultimapoing", type: "fighting", category: "physique", power: 80, accuracy: 100, pp: 20 },
   "dark-lariat": { name: "Dark Lariat", type: "dark", category: "physique", power: 85, accuracy: 100, pp: 10 },
@@ -147,6 +153,14 @@ const MOVE_DATA = {
   "aeropique": { name: "Aéropique", type: "flying", category: "physique", power: 60, accuracy: 100, pp: 30, priority: 1 },
   "dard-nuee": { name: "Dard-Nuée", type: "bug", category: "physique", power: 90, accuracy: 100, pp: 15 },
   "colere": { name: "Colère", type: "dragon", category: "physique", power: 120, accuracy: 100, pp: 10 },
+
+  // Les altérations, sans lesquelles la moitié de la stratégie manquait.
+  "poudre-dodo": { name: "Poudre Dodo", type: "grass", category: "statut", power: 0, accuracy: 75, pp: 15, inflicts: { status: "sommeil", chance: 1 } },
+  "para-spore": { name: "Para-Spore", type: "grass", category: "statut", power: 0, accuracy: 75, pp: 30, inflicts: { status: "paralysie", chance: 1 } },
+  "cage-eclair": { name: "Cage-Éclair", type: "electric", category: "statut", power: 0, accuracy: 90, pp: 20, inflicts: { status: "paralysie", chance: 1 } },
+  toxik: { name: "Toxik", type: "poison", category: "statut", power: 0, accuracy: 90, pp: 10, inflicts: { status: "poison", chance: 1 } },
+  berceuse: { name: "Berceuse", type: "normal", category: "statut", power: 0, accuracy: 55, pp: 15, inflicts: { status: "sommeil", chance: 1 } },
+  "feu-follet": { name: "Feu Follet", type: "fire", category: "statut", power: 0, accuracy: 85, pp: 15, inflicts: { status: "brulure", chance: 1 } },
 } as const satisfies Record<string, Move>;
 
 export type MoveId = keyof typeof MOVE_DATA;
@@ -606,6 +620,20 @@ const BY_TYPE = (() => {
   return table;
 })();
 
+/** Les attaques qui posent une altération, rangées par type. */
+const STATUS_BY_TYPE = (() => {
+  const table: Partial<Record<TypeName, MoveId>> = {};
+  for (const id of Object.keys(MOVES) as MoveId[]) {
+    const mv = MOVES[id];
+    if (mv.category !== "statut" || !mv.inflicts) continue;
+    table[mv.type] ??= id;
+  }
+  return table;
+})();
+
+/** Niveau à partir duquel une espèce reconstituée sait poser un statut. */
+const STATUS_LEVEL = 12;
+
 /** Le plafond de puissance qu'un niveau autorise. */
 const ceilingAt = (level: number) => 25 + level * 3;
 
@@ -627,10 +655,15 @@ function bestMove(type: TypeName, level: number): MoveId | null {
  */
 export function typedMoveset(types: TypeName[], level: number): MoveId[] {
   const picks: MoveId[] = [];
-  const add = (move: MoveId | null) => {
+  const add = (move: MoveId | null | undefined) => {
     if (move && !picks.includes(move) && picks.length < 4) picks.push(move);
   };
   for (const type of types) add(bestMove(type, level));
+  // Une altération à son propre type, une fois passé le niveau où elle
+  // cesse d'être écrasante contre un débutant.
+  if (level >= STATUS_LEVEL) {
+    for (const type of types) add(STATUS_BY_TYPE[type]);
+  }
   for (const filler of ["vive-attaque", "plaquage", "charge"] as MoveId[]) {
     if (picks.length >= 4) break;
     // Le premier remplissage est garanti : jamais moins de deux attaques.

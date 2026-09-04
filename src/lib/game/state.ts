@@ -225,15 +225,22 @@ export function applyItem(
   if (refus) return { state, message: refus };
 
   const releve = mon.hp <= 0;
+  const soigne = ITEMS[item].kind === "statut";
   return {
     state: {
       ...state,
       bag: spend(state.bag, item),
-      party: state.party.map((m, i) => (i === index ? { ...m, hp: m.hp + healed } : m)),
+      party: state.party.map((m, i) =>
+        i === index
+          ? { ...m, hp: m.hp + healed, ...(soigne ? { status: null, sleep: 0 } : {}) }
+          : m,
+      ),
     },
-    message: releve
-      ? `${mon.name} reprend ses esprits et récupère ${healed} PV !`
-      : `${mon.name} récupère ${healed} PV !`,
+    message: soigne
+      ? `${mon.name} n'a plus aucune altération.`
+      : releve
+        ? `${mon.name} reprend ses esprits et récupère ${healed} PV !`
+        : `${mon.name} récupère ${healed} PV !`,
   };
 }
 
@@ -271,12 +278,16 @@ export function loadGame(): GameState | null {
       box: (data.box ?? []).map((mon) => ({
         ...mon,
         shiny: mon.shiny ?? false,
+        status: mon.status ?? null,
+        sleep: mon.sleep ?? 0,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
       starter: data.starter ?? data.party[0]?.id,
       party: data.party.map((mon) => ({
         ...mon,
         shiny: mon.shiny ?? false,
+        status: mon.status ?? null,
+        sleep: mon.sleep ?? 0,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
     };

@@ -12,9 +12,10 @@ export type ItemId =
   | "potion"
   | "superpotion"
   | "hyperpotion"
-  | "rappel";
+  | "rappel"
+  | "totalsoin";
 
-export type ItemKind = "ball" | "soin" | "rappel";
+export type ItemKind = "ball" | "soin" | "rappel" | "statut";
 
 export type Item = {
   name: string;
@@ -36,6 +37,7 @@ export const ITEMS: Record<ItemId, Item> = {
   superpotion: { name: "Super Potion", price: 700, kind: "soin", heal: 50 },
   hyperpotion: { name: "Hyper Potion", price: 1200, kind: "soin", heal: 200 },
   rappel: { name: "Rappel", price: 1500, kind: "rappel", share: 0.5 },
+  totalsoin: { name: "Total Soin", price: 600, kind: "statut" },
 };
 
 /** L'ordre des rayons et du sac : du plus courant au plus rare. */
@@ -47,13 +49,14 @@ export const ITEM_ORDER: ItemId[] = [
   "superpotion",
   "hyperpotion",
   "rappel",
+  "totalsoin",
 ];
 
 export type Bag = Record<ItemId, number>;
 
 export const emptyBag = (): Bag => ({
   ball: 0, superball: 0, hyperball: 0,
-  potion: 0, superpotion: 0, hyperpotion: 0, rappel: 0,
+  potion: 0, superpotion: 0, hyperpotion: 0, rappel: 0, totalsoin: 0,
 });
 
 /** Un sac neuf : de quoi tenir jusqu'à la première boutique. */
@@ -103,6 +106,10 @@ export function effectOn(
   if (!mon) return { healed: 0, refus: "Aucun Pokémon à soigner." };
 
   const max = maxHp(mon);
+  if (data.kind === "statut") {
+    if (!mon.status) return { healed: 0, refus: `${mon.name} se porte très bien.` };
+    return { healed: 0, refus: null };
+  }
   if (data.kind === "rappel") {
     if (mon.hp > 0) return { healed: 0, refus: `${mon.name} tient encore debout !` };
     return { healed: Math.max(1, Math.floor(max * (data.share ?? 0.5))), refus: null };

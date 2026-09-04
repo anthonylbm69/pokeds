@@ -2,7 +2,14 @@
 
 import { animatedBackUrl, animatedUrl, staticBackUrl, staticUrl } from "@/lib/pokeapi";
 import { expForLevel, species } from "@/lib/game/data";
-import { activeMon, maxHp, type BattleState, type Mon } from "@/lib/game/battle";
+import {
+  STATUS_FR,
+  STATUS_TAG,
+  activeMon,
+  maxHp,
+  type BattleState,
+  type Mon,
+} from "@/lib/game/battle";
 import { trainerPortrait } from "@/lib/game/sprites";
 import type { NpcSprite } from "@/lib/game/world";
 
@@ -51,6 +58,11 @@ function Plate({ mon, own }: { mon: Mon; own: boolean }) {
         {mon.shiny && (
           <span className="shiny-mark" title="Chromatique">
             ✦
+          </span>
+        )}
+        {mon.status && (
+          <span className={`statut statut--${mon.status}`} title={STATUS_FR[mon.status]}>
+            {STATUS_TAG[mon.status]}
           </span>
         )}
         <span className="plate__lvl">N.{mon.level}</span>

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { iconUrl, partyIconUrl, staticUrl } from "@/lib/pokeapi";
 import { TYPE_FR, species } from "@/lib/game/data";
-import { maxHp, type Mon } from "@/lib/game/battle";
+import { STATUS_FR, STATUS_TAG, maxHp, type Mon } from "@/lib/game/battle";
 import type { GameState } from "@/lib/game/state";
 
 export type Choice = {
@@ -60,6 +60,11 @@ function MonCard({ mon, current }: { mon: Mon; current: boolean }) {
           )}
         </span>
         <span className="monc__lvl">N.{mon.level}</span>
+        {mon.status && (
+          <span className={`statut statut--${mon.status}`} title={STATUS_FR[mon.status]}>
+            {STATUS_TAG[mon.status]}
+          </span>
+        )}
         <span className="hpbar hpbar--small">
           <span
             className={`hpbar__fill hpbar__fill--${tone}`}

@@ -2015,6 +2015,25 @@ body::before {
 
 /* ==================================================== les chromatiques */
 
+/* L'étiquette d'altération, comme la pastille des jeux d'origine. */
+.statut {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  vertical-align: middle;
+  background: #6b7280;
+}
+
+.statut--poison { background: #9b59b6; }
+.statut--brulure { background: #e0553a; }
+.statut--paralysie { background: #d4a017; }
+.statut--sommeil { background: #6b7280; }
+.statut--gel { background: #4aa8d8; }
+
 .shiny-mark {
   margin-left: 4px;
   font-size: 11px;
