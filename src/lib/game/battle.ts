@@ -12,6 +12,7 @@ import {
   expForLevel,
   expGain,
   species,
+  typedMoveset,
   type MoveId,
   type StatKey,
   type TypeName,
@@ -32,10 +33,10 @@ export type Mon = {
 };
 
 /**
- * Une chance sur cinq cent douze. Les jeux d'origine sont bien plus avares,
- * mais sur une partie de cette taille on ne croiserait jamais personne.
+ * Une rencontre sur dix. Les jeux d'origine sont infiniment plus avares —
+ * une sur huit mille — mais l'idée est ici d'en croiser pour de vrai.
  */
-export const SHINY_RATE = 1 / 512;
+export const SHINY_RATE = 0.1;
 
 export type Stages = Record<Exclude<StatKey, "hp"> | "acc", number>;
 
@@ -51,16 +52,19 @@ const roll = (n: number) => Math.floor(rand() * n);
 let counter = 0;
 const uid = () => `m${Date.now().toString(36)}${(counter++).toString(36)}`;
 
-/** Les quatre dernières attaques apprises, comme un Pokémon sauvage. */
+const slot = (move: MoveId) => ({ id: move, pp: MOVES[move].pp, max: MOVES[move].pp });
+
+/**
+ * Les quatre dernières attaques apprises, comme un Pokémon sauvage. Les
+ * espèces reconstituées du Pokédex national n'ont pas d'apprentissage écrit :
+ * leur répertoire se déduit de leurs types et de leur niveau.
+ */
 function movesAtLevel(id: number, level: number) {
-  const known = species(id)
-    .learnset.filter((l) => l.level <= level)
-    .slice(-4);
-  return known.map((l) => ({
-    id: l.move,
-    pp: MOVES[l.move].pp,
-    max: MOVES[l.move].pp,
-  }));
+  const kind = species(id);
+  const known = kind.learnset.length
+    ? kind.learnset.filter((l) => l.level <= level).slice(-4).map((l) => l.move)
+    : typedMoveset(kind.types, level);
+  return known.map(slot);
 }
 
 export function createMon(id: number, level: number, shiny?: boolean): Mon {
@@ -326,18 +330,24 @@ function grantExp(state: BattleState, messages: string[]): void {
     mon.hp = Math.min(maxHp(mon), mon.hp + (maxHp(mon) - before));
     messages.push(`${mon.name} monte au niveau ${mon.level} !`);
 
-    for (const learn of species(mon.id).learnset) {
-      if (learn.level !== mon.level) continue;
-      if (mon.moves.some((m) => m.id === learn.move)) continue;
-      const entry = { id: learn.move, pp: MOVES[learn.move].pp, max: MOVES[learn.move].pp };
+    const kind = species(mon.id);
+    // Fiche écrite à la main : on suit l'apprentissage au niveau près.
+    // Espèce reconstituée : son répertoire se recalcule, ce qui lui vaut le
+    // palier supérieur de son type le moment venu.
+    const learned = kind.learnset.length
+      ? kind.learnset.filter((l) => l.level === mon.level).map((l) => l.move)
+      : typedMoveset(kind.types, mon.level);
+
+    for (const move of learned) {
+      if (mon.moves.some((m) => m.id === move)) continue;
       if (mon.moves.length < 4) {
-        mon.moves.push(entry);
-        messages.push(`${mon.name} apprend ${MOVES[learn.move].name} !`);
+        mon.moves.push(slot(move));
+        messages.push(`${mon.name} apprend ${MOVES[move].name} !`);
       } else {
         const dropped = mon.moves.shift()!;
-        mon.moves.push(entry);
+        mon.moves.push(slot(move));
         messages.push(
-          `${mon.name} oublie ${MOVES[dropped.id].name} et apprend ${MOVES[learn.move].name} !`,
+          `${mon.name} oublie ${MOVES[dropped.id].name} et apprend ${MOVES[move].name} !`,
         );
       }
     }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { iconUrl, partyIconUrl, staticUrl } from "@/lib/pokeapi";
-import { SPECIES, TYPE_FR, species } from "@/lib/game/data";
+import { TYPE_FR, species } from "@/lib/game/data";
 import { maxHp, type Mon } from "@/lib/game/battle";
 import type { GameState } from "@/lib/game/state";
 
@@ -141,7 +141,7 @@ export default function TouchPanel({
                     e.currentTarget.src = iconUrl(id);
                   }}
                 />
-                <span className="starter__name">{SPECIES[id].name}</span>
+                <span className="starter__name">{species(id).name}</span>
                 <span className="starter__type">
                   {species(id).types.map((t) => TYPE_FR[t]).join(" / ")}
                 </span>

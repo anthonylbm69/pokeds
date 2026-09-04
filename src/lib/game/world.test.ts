@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { SPECIES } from "./data";
+import { DEX } from "./dex";
 import {
   BUS_STOPS,
+  LOCAL_SHARE,
   MAPS,
   REGION,
   STEP,
   TILES,
   regionNodeOf,
+  rollEncounter,
   seesPlayer,
   tileAt,
   walkable,
@@ -296,5 +299,65 @@ describe("franchissement", () => {
     const npc = bourg.npcs[0];
     expect(walkable(bourg, npc.x, npc.y, [])).toBe(true);
     expect(walkable(bourg, npc.x, npc.y, bourg.npcs)).toBe(false);
+  });
+});
+
+describe("les hautes herbes", () => {
+  it("tirent dans tout le Pokédex national, pas seulement la faune locale", () => {
+    const route = MAPS.route1;
+    const locales = new Set(route.encounters!.map((e) => e.id));
+    const vus = new Set<number>();
+    for (let i = 0; i < 4000; i++) {
+      const rencontre = rollEncounter(route)!;
+      vus.add(rencontre.id);
+    }
+    // Deux tirages sur trois viennent du Pokédex entier : on doit voir passer
+    // bien plus que les deux espèces inscrites sur la carte.
+    expect(vus.size).toBeGreaterThan(100);
+    for (const id of locales) expect(vus.has(id)).toBe(true);
+  });
+
+  it("ne proposent que des espèces existantes et jamais un légendaire", () => {
+    const rares = new Set(
+      Object.keys(DEX).map(Number).filter((id) => DEX[id][6]),
+    );
+    for (const [id, map] of Object.entries(MAPS) as [MapId, MapSpec][]) {
+      if (!map.encounters?.length) continue;
+      for (let i = 0; i < 300; i++) {
+        const { id: espece, level } = rollEncounter(map)!;
+        expect(DEX[espece], `${id} : espèce ${espece} hors Pokédex`).toBeDefined();
+        expect(rares.has(espece), `${id} : ${espece} est un légendaire`).toBe(false);
+        expect(level).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("gardent la tranche de niveaux inscrite sur la carte", () => {
+    for (const [id, map] of Object.entries(MAPS) as [MapId, MapSpec][]) {
+      if (!map.encounters?.length) continue;
+      const min = Math.min(...map.encounters.map((e) => e.min));
+      const max = Math.max(...map.encounters.map((e) => e.max));
+      for (let i = 0; i < 200; i++) {
+        const { level } = rollEncounter(map)!;
+        expect(level, `${id} : niveau ${level} hors de [${min}, ${max}]`)
+          .toBeGreaterThanOrEqual(min);
+        expect(level).toBeLessThanOrEqual(max);
+      }
+    }
+  });
+
+  it("laissent la faune locale peser sa part", () => {
+    const route = MAPS.route1;
+    const locales = new Set(route.encounters!.map((e) => e.id));
+    let chez_nous = 0;
+    const tirages = 20000;
+    for (let i = 0; i < tirages; i++) {
+      if (locales.has(rollEncounter(route)!.id)) chez_nous += 1;
+    }
+    // Un peu au-dessus de LOCAL_SHARE : le tirage général peut retomber sur
+    // une espèce locale. Bornes larges, on ne vérifie que l'ordre de grandeur.
+    const part = chez_nous / tirages;
+    expect(part).toBeGreaterThan(LOCAL_SHARE - 0.05);
+    expect(part).toBeLessThan(LOCAL_SHARE + 0.1);
   });
 });

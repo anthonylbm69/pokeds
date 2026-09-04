@@ -1,7 +1,9 @@
 /**
- * Le monde : quatre cartes en mode texte, un caractère par case. Les PNJ, les
+ * Le monde : des cartes en mode texte, un caractère par case. Les PNJ, les
  * passages et les tables de rencontre vivent à côté de la grille.
  */
+
+import { WILD_POOL } from "./dex";
 
 export type Dir = "up" | "down" | "left" | "right";
 
@@ -2283,7 +2285,18 @@ export const STEP: Record<Dir, { dx: number; dy: number }> = {
   right: { dx: 1, dy: 0 },
 };
 
-/** Tire une rencontre dans les hautes herbes selon les poids de la carte. */
+/**
+ * Part des rencontres réservée à la faune locale de la carte. Le reste est
+ * tiré dans tout le Pokédex national : on peut croiser n'importe laquelle des
+ * six cent quarante-neuf premières espèces, légendaires exceptés.
+ */
+export const LOCAL_SHARE = 0.35;
+
+/**
+ * Tire une rencontre dans les hautes herbes. Les poids de la carte fixent
+ * toujours la tranche de niveaux — une Route 1 reste une Route 1 — mais
+ * l'espèce, elle, vient deux fois sur trois du Pokédex entier.
+ */
 export function rollEncounter(map: MapSpec): { id: number; level: number } | null {
   if (!map.encounters?.length) return null;
   const total = map.encounters.reduce((sum, e) => sum + e.weight, 0);
@@ -2291,8 +2304,12 @@ export function rollEncounter(map: MapSpec): { id: number; level: number } | nul
   for (const e of map.encounters) {
     pick -= e.weight;
     if (pick <= 0) {
+      const id =
+        Math.random() < LOCAL_SHARE
+          ? e.id
+          : WILD_POOL[Math.floor(Math.random() * WILD_POOL.length)];
       return {
-        id: e.id,
+        id,
         level: e.min + Math.floor(Math.random() * (e.max - e.min + 1)),
       };
     }

@@ -4,6 +4,8 @@
  * fournir les sprites, pour qu'un combat n'attende jamais le réseau.
  */
 
+import { DEX, EVOLUTIONS, type DexEntry } from "./dex";
+
 export type TypeName =
   | "normal"
   | "fire"
@@ -119,6 +121,32 @@ const MOVE_DATA = {
   // De quoi armer les légendaires des Arènes.
   "draco-souffle": { name: "Draco-Souffle", type: "dragon", category: "speciale", power: 60, accuracy: 100, pp: 20 },
   eclair: { name: "Éclair", type: "electric", category: "speciale", power: 40, accuracy: 100, pp: 30 },
+
+  // Les hautes herbes recrachent les six cent quarante-neuf premières espèces :
+  // les six types qui n'avaient encore aucune attaque en méritaient une.
+  "vent-glace": { name: "Vent Glace", type: "ice", category: "speciale", power: 55, accuracy: 95, pp: 15, lower: { stat: "spe", stages: 1 } },
+  blizzard: { name: "Blizzard", type: "ice", category: "speciale", power: 110, accuracy: 70, pp: 5 },
+  "choc-mental": { name: "Choc Mental", type: "psychic", category: "speciale", power: 50, accuracy: 100, pp: 25 },
+  psyko: { name: "Psyko", type: "psychic", category: "speciale", power: 90, accuracy: 100, pp: 10 },
+  "griffe-ombre": { name: "Griffe Ombre", type: "ghost", category: "physique", power: 70, accuracy: 100, pp: 15 },
+  "griffe-acier": { name: "Griffe Acier", type: "steel", category: "physique", power: 50, accuracy: 95, pp: 35 },
+  "tete-de-fer": { name: "Tête de Fer", type: "steel", category: "physique", power: 80, accuracy: 100, pp: 15 },
+  acide: { name: "Acide", type: "poison", category: "speciale", power: 40, accuracy: 100, pp: 30, lower: { stat: "spd", stages: 1 } },
+  "direct-toxik": { name: "Direct Toxik", type: "poison", category: "physique", power: 80, accuracy: 100, pp: 20 },
+  "voix-enjoleuse": { name: "Voix Enjôleuse", type: "fairy", category: "speciale", power: 40, accuracy: 100, pp: 15 },
+  "eclat-magique": { name: "Éclat Magique", type: "fairy", category: "speciale", power: 80, accuracy: 100, pp: 10 },
+
+  // Les paliers hauts des types déjà servis, pour que les espèces engendrées
+  // ne restent pas armées d'une Flammèche au niveau cinquante.
+  hydrocanon: { name: "Hydrocanon", type: "water", category: "speciale", power: 110, accuracy: 80, pp: 5 },
+  "tonnerre-eclair": { name: "Tonnerre", type: "electric", category: "speciale", power: 90, accuracy: 100, pp: 15 },
+  "eboulement": { name: "Éboulement", type: "rock", category: "physique", power: 75, accuracy: 90, pp: 10 },
+  "ultimapoing": { name: "Ultimapoing", type: "fighting", category: "physique", power: 80, accuracy: 100, pp: 20 },
+  "dark-lariat": { name: "Dark Lariat", type: "dark", category: "physique", power: 85, accuracy: 100, pp: 10 },
+  megasabot: { name: "Mégasabot", type: "ground", category: "physique", power: 100, accuracy: 75, pp: 10 },
+  "aeropique": { name: "Aéropique", type: "flying", category: "physique", power: 60, accuracy: 100, pp: 30, priority: 1 },
+  "dard-nuee": { name: "Dard-Nuée", type: "bug", category: "physique", power: 90, accuracy: 100, pp: 15 },
+  "colere": { name: "Colère", type: "dragon", category: "physique", power: 120, accuracy: 100, pp: 10 },
 } as const satisfies Record<string, Move>;
 
 export type MoveId = keyof typeof MOVE_DATA;
@@ -555,7 +583,93 @@ export const SPECIES: Record<number, Species> = {
   },
 };
 
-export const species = (id: number): Species => SPECIES[id];
+/* ------------------------------------------------- espèces reconstituées */
+
+/**
+ * Les hautes herbes tirent parmi les six cent quarante-neuf premières
+ * espèces ; on ne va évidemment pas écrire à la main l'apprentissage de
+ * chacune. Celles qui n'ont pas de fiche ci-dessus empruntent leurs
+ * statistiques au Pokédex national et reçoivent des attaques déduites de
+ * leurs types.
+ */
+
+/** Attaques offensives du catalogue, groupées par type et rangées par force. */
+const BY_TYPE = (() => {
+  const table: Partial<Record<TypeName, MoveId[]>> = {};
+  for (const id of Object.keys(MOVES) as MoveId[]) {
+    if (MOVES[id].category === "statut") continue;
+    (table[MOVES[id].type] ??= []).push(id);
+  }
+  for (const list of Object.values(table)) {
+    list.sort((a, b) => MOVES[a].power - MOVES[b].power);
+  }
+  return table;
+})();
+
+/** Le plafond de puissance qu'un niveau autorise. */
+const ceilingAt = (level: number) => 25 + level * 3;
+
+/**
+ * La plus forte attaque d'un type que le niveau permet : un sauvage de
+ * niveau trois lance une Flammèche, pas un Lance-Flammes.
+ */
+function bestMove(type: TypeName, level: number): MoveId | null {
+  const pool = BY_TYPE[type];
+  if (!pool?.length) return null;
+  const affordable = pool.filter((m) => MOVES[m].power <= ceilingAt(level));
+  return affordable.length ? affordable[affordable.length - 1] : pool[0];
+}
+
+/**
+ * Répertoire déduit des types : une attaque par type, complétée de coups
+ * normaux quand le niveau les justifie. Mieux vaut deux attaques à sa portée
+ * que quatre dont trois hors de saison.
+ */
+export function typedMoveset(types: TypeName[], level: number): MoveId[] {
+  const picks: MoveId[] = [];
+  const add = (move: MoveId | null) => {
+    if (move && !picks.includes(move) && picks.length < 4) picks.push(move);
+  };
+  for (const type of types) add(bestMove(type, level));
+  for (const filler of ["vive-attaque", "plaquage", "charge"] as MoveId[]) {
+    if (picks.length >= 4) break;
+    // Le premier remplissage est garanti : jamais moins de deux attaques.
+    if (picks.length < 2 || MOVES[filler].power <= ceilingAt(level)) add(filler);
+  }
+  return picks;
+}
+
+/** Fiches reconstituées, gardées en cache : `species` est un chemin chaud. */
+const REBUILT: Record<number, Species> = {};
+
+function rebuild(id: number, entry: DexEntry): Species {
+  const [name, genus, types, base, catchRate, baseExp] = entry;
+  const [hp, atk, def, spa, spd, spe] = base;
+  const evolution = EVOLUTIONS[id];
+  return {
+    id,
+    name,
+    genus,
+    types: types as TypeName[],
+    base: { hp, atk, def, spa, spd, spe },
+    catchRate,
+    baseExp,
+    // Apprentissage vide : les attaques se déduisent des types au moment où
+    // la créature est fabriquée, puis à chaque niveau gagné.
+    learnset: [],
+    // Seules les espèces détaillées à la main portent une notice de terrain.
+    entry: "",
+    evolvesAt: evolution?.[0],
+    evolvesInto: evolution?.[1],
+  };
+}
+
+/** Fiche d'une espèce : écrite à la main si elle existe, sinon reconstituée. */
+export function species(id: number): Species {
+  const written = SPECIES[id];
+  if (written) return written;
+  return (REBUILT[id] ??= rebuild(id, DEX[id]));
+}
 
 /* -------------------------------------------------------------- formules */
 

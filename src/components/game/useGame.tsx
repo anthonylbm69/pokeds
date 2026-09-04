@@ -1326,8 +1326,10 @@ export function useGame({
       (battleUi && battleUi.view !== "message")
         ? "bottom"
         : "top",
+    // Avec six cent quarante-neuf espèces dans les herbes, l'écart entre ce
+    // que l'on croise et ce que l'on attrape mérite d'être affiché.
     count: game.party.length
-      ? `${game.party.length}/6 · ${game.caught.length} vus`
+      ? `${game.party.length}/6 · ${game.seen.length} vus · ${game.caught.length} pris`
       : "AUCUN POKéMON",
   };
 }

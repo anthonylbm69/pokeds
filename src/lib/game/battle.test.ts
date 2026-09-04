@@ -148,14 +148,16 @@ describe("déroulement d'un combat", () => {
 });
 
 describe("les chromatiques", () => {
-  it("restent rares sans être introuvables", () => {
+  it("sortent à peu près une fois sur dix", () => {
+    const tirages = 20000;
     let brillants = 0;
-    for (let i = 0; i < 20000; i++) {
+    for (let i = 0; i < tirages; i++) {
       if (createMon(504, 5).shiny) brillants += 1;
     }
-    // Espérance : 20000 / 512 ≈ 39. Bornes très larges, le tirage est aléatoire.
-    expect(brillants).toBeGreaterThan(10);
-    expect(brillants).toBeLessThan(90);
+    // Espérance : 2000, écart-type ≈ 42. Six écarts-types de marge, pour que
+    // le hasard ne fasse jamais rougir la suite.
+    expect(brillants).toBeGreaterThan(1750);
+    expect(brillants).toBeLessThan(2250);
   });
 
   it("se laissent imposer, dans un sens comme dans l'autre", () => {
