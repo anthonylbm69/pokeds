@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { TILE, drawBike, drawCharacter, drawTile, variantFor } from "@/lib/game/sprites";
+import { animatedBackUrl, animatedUrl, staticBackUrl, staticUrl } from "@/lib/pokeapi";
+import { TILE, drawBike, drawCharacter, drawMon, drawTile, variantFor } from "@/lib/game/sprites";
 import {
   MAPS,
   STEP,
   TILES,
+  followerSpot,
   tileChar,
   walkable,
   type Dir,
@@ -25,10 +27,15 @@ export type PlayerPos = {
   frame: number;
   /** Petit temps d'arrêt quand on pivote sans avancer. */
   turnDelay: number;
+  /** Case du Pokémon qui suit : celle que le joueur vient de quitter. */
+  fx: number;
+  fy: number;
 };
 
+// À l'arrivée sur une carte, le suiveur est empilé sur le joueur ; il se
+// dégage tout seul au premier pas.
 export const newPlayer = (x: number, y: number, dir: Dir): PlayerPos => ({
-  x, y, dir, moving: false, progress: 0, frame: 0, turnDelay: 0,
+  x, y, dir, moving: false, progress: 0, frame: 0, turnDelay: 0, fx: x, fy: y,
 });
 
 type Props = {
@@ -39,6 +46,8 @@ type Props = {
   paused: boolean;
   /** En selle : deux fois plus rapide qu'à pied, et le vélo se dessine. */
   riding: boolean;
+  /** Le Pokémon de tête, quand le joueur le laisse sortir. */
+  follower: { id: number; shiny: boolean } | null;
   onStep: (x: number, y: number) => void;
 };
 
@@ -59,14 +68,15 @@ export default function WorldView({
   held,
   paused,
   riding,
+  follower,
   onStep,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // La boucle d'animation lit toujours les dernières valeurs sans redémarrer.
-  const latest = useRef({ mapId, npcs, paused, riding, onStep });
+  const latest = useRef({ mapId, npcs, paused, riding, follower, onStep });
   useEffect(() => {
-    latest.current = { mapId, npcs, paused, riding, onStep };
+    latest.current = { mapId, npcs, paused, riding, follower, onStep };
   });
 
   useEffect(() => {
@@ -96,6 +106,9 @@ export default function WorldView({
         p.progress += dt / pace;
         if (p.progress < 1) return;
         const { dx, dy } = STEP[p.dir];
+        // Le suiveur récupère la case que l'on libère.
+        p.fx = p.x;
+        p.fy = p.y;
         p.x += dx;
         p.y += dy;
         p.progress = 0;
@@ -188,6 +201,24 @@ export default function WorldView({
           y: npc.y,
           paint: () =>
             drawCharacter(ctx, npc.sprite, npc.dir, 0, npc.x * TILE - camX, npc.y * TILE - camY),
+        });
+      }
+      const mon = latest.current.follower;
+      if (mon) {
+        const spot = followerSpot(p);
+        // Empilé sur le joueur, il passe dessous : on le range juste avant.
+        actors.push({
+          y: spot.y,
+          paint: () => {
+            const back = spot.dir === "up";
+            const url = back
+              ? animatedBackUrl(mon.id, mon.shiny) ?? staticBackUrl(mon.id, mon.shiny)
+              : animatedUrl(mon.id, mon.shiny) ?? staticUrl(mon.id, mon.shiny);
+            const secours = back
+              ? staticBackUrl(mon.id, mon.shiny)
+              : staticUrl(mon.id, mon.shiny);
+            drawMon(ctx, url, secours, spot.x * TILE - camX, spot.y * TILE - camY);
+          },
         });
       }
       actors.push({

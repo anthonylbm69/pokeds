@@ -308,6 +308,55 @@ export function drawBike(ctx: CanvasRenderingContext2D, x: number, y: number): v
   paint(ctx, BIKE, BIKE_COLORS, x, y + 8);
 }
 
+/* --------------------------------------------------- le Pokémon qui suit */
+
+/**
+ * Tout le reste du décor est peint au pixel dans ce fichier ; le Pokémon de
+ * tête, lui, est une image de la PokéAPI. On la charge une fois puis on la
+ * garde : `null` signale qu'elle n'est pas encore prête, et on ne dessine
+ * rien plutôt qu'un carré vide.
+ */
+const monSprites = new Map<string, HTMLImageElement | null>();
+
+function monSprite(url: string, fallback?: string): HTMLImageElement | null {
+  const held = monSprites.get(url);
+  if (held !== undefined) return held;
+
+  monSprites.set(url, null);
+  const img = new Image();
+  img.decoding = "async";
+  img.onload = () => monSprites.set(url, img);
+  img.onerror = () => {
+    // Une livrée manquante — un chromatique sans sprite animé — bascule sur
+    // l'image fixe avant d'abandonner.
+    if (fallback && img.src !== fallback) img.src = fallback;
+  };
+  img.src = url;
+  return null;
+}
+
+/** Hauteur du suiveur : un rien plus qu'une case, pour qu'il se remarque. */
+const MON_H = 34;
+
+/**
+ * Dessine le Pokémon de tête sur sa case. Les sprites animés de la
+ * Génération V s'animent tout seuls dans l'élément image : chaque passage
+ * en récupère la pose du moment.
+ */
+export function drawMon(
+  ctx: CanvasRenderingContext2D,
+  url: string,
+  fallback: string,
+  x: number,
+  y: number,
+): void {
+  const img = monSprite(url, fallback);
+  if (!img?.naturalWidth) return;
+
+  const w = Math.round((MON_H * img.naturalWidth) / img.naturalHeight);
+  ctx.drawImage(img, Math.round(x + (TILE - w) / 2), Math.round(y + TILE - MON_H), w, MON_H);
+}
+
 /* --------------------------------------------------------------- décors */
 
 /**

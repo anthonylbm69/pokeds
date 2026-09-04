@@ -2285,6 +2285,39 @@ export const STEP: Record<Dir, { dx: number; dy: number }> = {
   right: { dx: 1, dy: 0 },
 };
 
+/* ---------------------------------------------------------------- suiveur */
+
+/**
+ * De quoi situer le Pokémon qui marche derrière le joueur. Il occupe la case
+ * que celui-ci vient de quitter : `fx` et `fy` sont sa case de départ, `x` et
+ * `y` celle du joueur, vers laquelle il glisse pendant le pas.
+ */
+export type Trail = {
+  x: number;
+  y: number;
+  fx: number;
+  fy: number;
+  moving: boolean;
+  progress: number;
+  dir: Dir;
+};
+
+/**
+ * Position du suiveur en cases, décimales pendant le pas, et direction de son
+ * regard. Tant qu'il est empilé sur le joueur — à l'arrivée sur une carte —
+ * il regarde du même côté que lui.
+ */
+export function followerSpot(t: Trail): { x: number; y: number; dir: Dir } {
+  const dx = t.x - t.fx;
+  const dy = t.y - t.fy;
+  const advance = t.moving ? Math.min(1, Math.max(0, t.progress)) : 0;
+  return {
+    x: t.fx + dx * advance,
+    y: t.fy + dy * advance,
+    dir: dx > 0 ? "right" : dx < 0 ? "left" : dy > 0 ? "down" : dy < 0 ? "up" : t.dir,
+  };
+}
+
 /**
  * Part des rencontres réservée à la faune locale de la carte. Le reste est
  * tiré dans tout le Pokédex national : on peut croiser n'importe laquelle des

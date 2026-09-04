@@ -190,6 +190,16 @@ export function useGame({
 
   const npcs = useMemo<NpcSpec[]>(() => map.npcs, [map]);
 
+  /**
+   * Le Pokémon qui marche derrière le joueur : le premier de l'équipe encore
+   * debout. Un Pokémon K.O. reste dans sa Ball.
+   */
+  const walker = useMemo(() => {
+    if (!game.follower) return null;
+    const lead = game.party.find((mon) => !isKo(mon));
+    return lead ? { id: lead.id, shiny: lead.shiny } : null;
+  }, [game.follower, game.party]);
+
   const npcById = useCallback(
     (id: string) => npcs.find((n) => n.id === id) ?? null,
     [npcs],
@@ -938,6 +948,12 @@ export function useGame({
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
         { id: "music", label: "MUSIQUE", sub: game.music ? "activée" : "coupée" },
+        {
+          id: "suiveur",
+          label: "SUIVEUR",
+          sub: game.party.length ? (game.follower ? "au pied" : "au repos") : "—",
+          disabled: !game.party.length,
+        },
         { id: "title", label: "TITRE", sub: "SELECT" },
       ],
     };
@@ -1047,6 +1063,7 @@ export function useGame({
         else if (choice.id === "dex") onOpenDex();
         else if (choice.id === "save") save();
         else if (choice.id === "music") setGame((g) => ({ ...g, music: !g.music }));
+        else if (choice.id === "suiveur") setGame((g) => ({ ...g, follower: !g.follower }));
         else if (choice.id === "title") onExit();
       }
     },
@@ -1268,6 +1285,7 @@ export function useGame({
           held={held}
           paused={phase.kind !== "world"}
           riding={game.riding}
+          follower={walker}
           onStep={onStep}
         />
         <span className="scene__zone">{MAPS[game.map].name}</span>

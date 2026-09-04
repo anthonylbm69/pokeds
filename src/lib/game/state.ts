@@ -23,6 +23,8 @@ export type GameState = {
   riding: boolean;
   /** Musique de fond activée. */
   music: boolean;
+  /** Le Pokémon de tête marche derrière le joueur. */
+  follower: boolean;
   /** Starter reçu : l'Arène s'en sert pour composer son équipe. */
   starter?: number;
   /** Événements franchis : starter reçu, dresseurs battus… */
@@ -108,6 +110,7 @@ export function newGame(name: string): GameState {
     bike: false,
     riding: false,
     music: true,
+    follower: true,
     flags: [],
     seen: [],
     caught: [],
@@ -170,6 +173,7 @@ export function loadGame(): GameState | null {
       bike: data.bike ?? false,
       riding: false,
       music: data.music ?? true,
+      follower: data.follower ?? true,
       starter: data.starter ?? data.party[0]?.id,
       party: data.party.map((mon) => ({
         ...mon,

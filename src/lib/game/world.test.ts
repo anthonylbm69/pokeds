@@ -8,6 +8,7 @@ import {
   REGION,
   STEP,
   TILES,
+  followerSpot,
   regionNodeOf,
   rollEncounter,
   seesPlayer,
@@ -15,6 +16,7 @@ import {
   walkable,
   type MapId,
   type MapSpec,
+  type Trail,
 } from "./world";
 
 const maps = Object.entries(MAPS) as [MapId, MapSpec][];
@@ -359,5 +361,46 @@ describe("les hautes herbes", () => {
     const part = chez_nous / tirages;
     expect(part).toBeGreaterThan(LOCAL_SHARE - 0.05);
     expect(part).toBeLessThan(LOCAL_SHARE + 0.1);
+  });
+});
+
+describe("le Pokémon qui suit", () => {
+  const trail = (over: Partial<Trail> = {}): Trail => ({
+    x: 5, y: 5, fx: 5, fy: 6, moving: false, progress: 0, dir: "up", ...over,
+  });
+
+  it("se tient sur la case que le joueur vient de quitter", () => {
+    const spot = followerSpot(trail());
+    expect(spot).toEqual({ x: 5, y: 6, dir: "up" });
+  });
+
+  it("regarde dans la direction du pas qu'il vient de faire", () => {
+    expect(followerSpot(trail({ x: 5, y: 5, fx: 4, fy: 5 })).dir).toBe("right");
+    expect(followerSpot(trail({ x: 5, y: 5, fx: 6, fy: 5 })).dir).toBe("left");
+    expect(followerSpot(trail({ x: 5, y: 5, fx: 5, fy: 4 })).dir).toBe("down");
+    expect(followerSpot(trail({ x: 5, y: 5, fx: 5, fy: 6 })).dir).toBe("up");
+  });
+
+  it("glisse vers la case du joueur pendant le pas", () => {
+    const debut = followerSpot(trail({ moving: true, progress: 0 }));
+    const milieu = followerSpot(trail({ moving: true, progress: 0.5 }));
+    const fin = followerSpot(trail({ moving: true, progress: 1 }));
+    expect(debut.y).toBe(6);
+    expect(milieu.y).toBe(5.5);
+    expect(fin.y).toBe(5);
+    // Il reste dans la colonne : le pas était vertical.
+    for (const p of [debut, milieu, fin]) expect(p.x).toBe(5);
+  });
+
+  it("ne dépasse jamais la case visée, même si le pas déborde", () => {
+    expect(followerSpot(trail({ moving: true, progress: 1.4 })).y).toBe(5);
+    expect(followerSpot(trail({ moving: true, progress: -0.2 })).y).toBe(6);
+  });
+
+  it("reste empilé sur le joueur à l'arrivée sur une carte", () => {
+    // `newPlayer` pose le suiveur sur la case du joueur : il n'a pas encore
+    // de pas derrière lui et prend donc son regard.
+    const spot = followerSpot(trail({ x: 5, y: 5, fx: 5, fy: 5, dir: "left" }));
+    expect(spot).toEqual({ x: 5, y: 5, dir: "left" });
   });
 });
