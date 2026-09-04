@@ -21,7 +21,7 @@ export type MapId =
 export type TileKind =
   | "grass" | "tall" | "path" | "flower" | "tree" | "water"
   | "wall" | "inwall" | "roof" | "door" | "floor" | "counter" | "furniture" | "sign"
-  | "arena" | "stands" | "bus";
+  | "arena" | "stands" | "bus" | "pc";
 
 type Tile = { kind: TileKind; solid: boolean; encounter?: boolean };
 
@@ -43,6 +43,7 @@ export const TILES: Record<string, Tile> = {
   A: { kind: "arena", solid: false },
   E: { kind: "stands", solid: true },
   U: { kind: "bus", solid: true },
+  P: { kind: "pc", solid: true },
 };
 
 export type NpcSprite =
@@ -387,7 +388,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "X-CCC--CCC-X",
       "X-CCC--CCC-X",
       "X----------X",
-      "X-B------B-X",
+      "X-P------B-X",
       "X----------X",
       "X----------X",
       "X----------X",
@@ -573,7 +574,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "X-CCC--CCC-X",
       "X-CCC--CCC-X",
       "X----------X",
-      "X-B------B-X",
+      "X-P------B-X",
       "X----------X",
       "X----------X",
       "X----------X",
@@ -929,7 +930,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "X-CCC--CCC-X",
       "X-CCC--CCC-X",
       "X----------X",
-      "X-B------B-X",
+      "X-P------B-X",
       "X----------X",
       "X----------X",
       "X----------X",
@@ -1343,7 +1344,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "X-CCC--CCC-X",
       "X-CCC--CCC-X",
       "X----------X",
-      "X-B------B-X",
+      "X-P------B-X",
       "X----------X",
       "X----------X",
       "X----------X",
@@ -1759,7 +1760,7 @@ export const MAPS: Record<MapId, MapSpec> = {
       "X-CCC--CCC-X",
       "X-CCC--CCC-X",
       "X----------X",
-      "X-B------B-X",
+      "X-P------B-X",
       "X----------X",
       "X----------X",
       "X----------X",

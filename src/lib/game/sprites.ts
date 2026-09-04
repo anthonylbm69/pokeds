@@ -601,6 +601,19 @@ const PAINTERS: Record<TileKind, Painter> = {
     }
   },
 
+  // Le PC des Centres : un écran bleu, une Ball dessus, une diode qui cligne.
+  pc: (ctx, v) => {
+    fill(ctx, "#e8dfd0");
+    px(ctx, "#8a8f99", 2, 3, 12, 12);
+    px(ctx, "#b9bec7", 3, 4, 10, 10);
+    px(ctx, "#20406e", 4, 5, 8, 6);
+    px(ctx, "#2f6bb0", 5, 6, 6, 4);
+    px(ctx, "#e8eef4", 7, 7, 2, 2);
+    px(ctx, "#c94f4f", 7, 7, 2, 1);
+    px(ctx, "#6f747d", 4, 12, 8, 2);
+    px(ctx, v % 2 ? "#7fe08a" : "#3f7a48", 12, 4, 1, 1);
+  },
+
   furniture: (ctx, v) => {
     fill(ctx, "#e8dfd0");
     if (v % 2) {

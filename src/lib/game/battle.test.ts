@@ -123,6 +123,10 @@ describe("déroulement d'un combat", () => {
   it("accorde de l'expérience à la victoire", () => {
     const mine = createMon(495, 5);
     const foe = createMon(504, 3);
+    // Un adversaire à un PV : le premier coup porté l'emporte à coup sûr.
+    // Sans cela, un jet de dégâts malheureux fait perdre ce duel une fois
+    // sur cent et rougir la suite sans qu'aucun code n'ait changé.
+    foe.hp = 1;
     const expected = expGain(species(504).baseExp, 3);
     const { state, log } = runBattle(mine, foe);
     expect(state.outcome).toBe("victoire");

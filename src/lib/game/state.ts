@@ -4,7 +4,7 @@
  */
 
 import { MOVES, type MoveId } from "./data";
-import { createMon, healMon, maxHp, type Mon } from "./battle";
+import { POTION_HEAL, createMon, healMon, maxHp, type Mon } from "./battle";
 import type { Dir, MapId } from "./world";
 
 export type GameState = {
@@ -15,6 +15,8 @@ export type GameState = {
   y: number;
   dir: Dir;
   party: Mon[];
+  /** Le PC des Centres : ce que l'équipe ne peut pas porter. */
+  box: Mon[];
   balls: number;
   potions: number;
   money: number;
@@ -104,6 +106,7 @@ export function newGame(name: string): GameState {
     y: 6,
     dir: "down",
     party: [],
+    box: [],
     balls: 5,
     potions: 3,
     money: 3000,
@@ -140,12 +143,81 @@ export const healParty = (state: GameState): GameState => ({
   party: state.party.map(healMon),
 });
 
+/** Ce que l'on peut garder sur soi ; le reste attend au PC. */
+export const PARTY_MAX = 6;
+
 export const addCaught = (state: GameState, mon: Mon): GameState => ({
   ...state,
-  party: state.party.length < 6 ? [...state.party, mon] : state.party,
+  ...(state.party.length < PARTY_MAX
+    ? { party: [...state.party, mon] }
+    : { box: [...state.box, healMon(mon)] }),
   caught: [...new Set([...state.caught, mon.id])],
   seen: [...new Set([...state.seen, mon.id])],
 });
+
+/* -------------------------------------------------------------------- PC */
+
+/**
+ * Le PC ne garde que des Pokémon en pleine forme : y déposer un blessé le
+ * soigne. On ne peut pas s'y vider les poches — il faut rester avec au moins
+ * un Pokémon pour sortir du Centre.
+ */
+export function depositMon(state: GameState, index: number): GameState {
+  const mon = state.party[index];
+  if (!mon || state.party.length <= 1) return state;
+  return {
+    ...state,
+    party: state.party.filter((_, i) => i !== index),
+    box: [...state.box, healMon(mon)],
+  };
+}
+
+/** Reprend un Pokémon au PC, si l'équipe a encore de la place. */
+export function withdrawMon(state: GameState, index: number): GameState {
+  const mon = state.box[index];
+  if (!mon || state.party.length >= PARTY_MAX) return state;
+  return {
+    ...state,
+    party: [...state.party, mon],
+    box: state.box.filter((_, i) => i !== index),
+  };
+}
+
+/**
+ * Met un Pokémon en tête d'équipe : c'est lui qui ouvre les combats et qui
+ * marche derrière le joueur.
+ */
+export function leadMon(state: GameState, index: number): GameState {
+  const mon = state.party[index];
+  if (!mon || index === 0) return state;
+  return { ...state, party: [mon, ...state.party.filter((_, i) => i !== index)] };
+}
+
+/**
+ * Soigne un Pokémon de l'équipe avec une Potion, hors combat. Le nom évite le
+ * préfixe `use`, que la règle des hooks de React prendrait pour un hook.
+ * Renvoie l'état inchangé et le motif du refus quand le soin est sans objet.
+ */
+export function applyPotion(
+  state: GameState,
+  index: number,
+): { state: GameState; message: string } {
+  const mon = state.party[index];
+  if (!mon) return { state, message: "Aucun Pokémon à soigner." };
+  if (state.potions <= 0) return { state, message: "Vous n'avez plus de Potion !" };
+  const max = maxHp(mon);
+  if (mon.hp >= max) return { state, message: `${mon.name} a déjà tous ses PV !` };
+
+  const healed = Math.min(POTION_HEAL, max - mon.hp);
+  return {
+    state: {
+      ...state,
+      potions: state.potions - 1,
+      party: state.party.map((m, i) => (i === index ? { ...m, hp: m.hp + healed } : m)),
+    },
+    message: `${mon.name} récupère ${healed} PV !`,
+  };
+}
 
 export const markSeen = (state: GameState, id: number): GameState =>
   state.seen.includes(id) ? state : { ...state, seen: [...state.seen, id] };
@@ -174,6 +246,11 @@ export function loadGame(): GameState | null {
       riding: false,
       music: data.music ?? true,
       follower: data.follower ?? true,
+      box: (data.box ?? []).map((mon) => ({
+        ...mon,
+        shiny: mon.shiny ?? false,
+        hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
+      })),
       starter: data.starter ?? data.party[0]?.id,
       party: data.party.map((mon) => ({
         ...mon,

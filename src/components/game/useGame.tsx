@@ -7,7 +7,9 @@ import { MOVES, TYPE_FR, species } from "@/lib/game/data";
 import {
   activeMon,
   createMon,
+  POTION_HEAL,
   isKo,
+  maxHp,
   playerMove,
   startTrainer,
   startWild,
@@ -16,6 +18,7 @@ import {
   throwBall,
   tryRun,
   type BattleState,
+  type Mon,
 } from "@/lib/game/battle";
 import {
   BUS_STOPS,
@@ -33,17 +36,22 @@ import {
 } from "@/lib/game/world";
 import {
   BIKE_PRICE,
+  PARTY_MAX,
   STARTERS,
   addCaught,
   counterStarter,
+  depositMon,
   giveStarter,
   hasFlag,
   healParty,
   loadGame,
   markSeen,
   newGame,
+  leadMon,
   saveGame,
+  applyPotion,
   withDreamTeam,
+  withdrawMon,
   withFlag,
   DREAM_LEVEL,
   type GameState,
@@ -94,6 +102,8 @@ type Phase =
   | { kind: "bus" }
   | { kind: "voyage"; to: MapId; label: string }
   | { kind: "shop"; counter: Counter; message: string | null }
+  | { kind: "sac"; on: "objets" | "cible"; message: string | null }
+  | { kind: "pc"; on: "menu" | "retirer" | "deposer" | "ordre"; message: string | null }
   | { kind: "battle"; ui: BattleUi };
 
 /** Les rayons, aux prix d'Unys. */
@@ -355,13 +365,13 @@ export function useGame({
       const lines: string[] = [];
 
       if (s.outcome === "capture" && s.caught) {
-        if (next.party.length >= 6) {
-          lines.push(`${s.caught.name} rejoint le PC : votre équipe est pleine.`);
-          next = { ...next, caught: [...new Set([...next.caught, s.caught.id])] };
-        } else {
-          next = addCaught(next, s.caught);
-          lines.push(`Les données de ${s.caught.name} sont ajoutées au Pokédex.`);
-        }
+        const plein = next.party.length >= PARTY_MAX;
+        next = addCaught(next, s.caught);
+        lines.push(
+          plein
+            ? `${s.caught.name} est transféré au PC : votre équipe est pleine.`
+            : `Les données de ${s.caught.name} sont ajoutées au Pokédex.`,
+        );
       }
 
       if (s.outcome === "victoire") music.play("victoire");
@@ -527,6 +537,12 @@ export function useGame({
       }
       setCursor(0);
       setPhase({ kind: "bus" });
+      return;
+    }
+
+    if (tileAt(map, tx, ty)?.kind === "pc") {
+      setCursor(0);
+      setPhase({ kind: "pc", on: "menu", message: null });
       return;
     }
 
@@ -769,6 +785,15 @@ export function useGame({
 
   const battleUi = phase.kind === "battle" ? phase.ui : null;
 
+  /** Une ligne de liste pour un Pokémon : nom, livrée, niveau et PV. */
+  const monLine = useCallback(
+    (mon: Mon) => ({
+      label: `${mon.name}${mon.shiny ? " ✦" : ""}`,
+      sub: `N.${mon.level} · ${mon.hp}/${maxHp(mon)} PV`,
+    }),
+    [],
+  );
+
   const choices = useMemo<{ list: Choice[]; layout: "grid" | "list" | "row"; hint: string; title: string }>(() => {
     if (battleUi) {
       const s = battleUi.state;
@@ -919,6 +944,114 @@ export function useGame({
       };
     }
 
+    if (phase.kind === "sac") {
+      const back = { id: "back", label: "RETOUR", tone: "back" as const };
+      if (phase.on === "cible") {
+        return {
+          title: "Sur quel Pokémon ?",
+          hint: "▲ ▼ pour choisir · A pour soigner · B pour revenir",
+          layout: "list",
+          list: [
+            ...game.party.map((mon, i) => ({
+              id: `mon:${i}`,
+              ...monLine(mon),
+              disabled: mon.hp >= maxHp(mon),
+              tone: "party" as const,
+            })),
+            back,
+          ],
+        };
+      }
+      return {
+        title: "Sac",
+        hint: "▲ ▼ pour choisir · A pour utiliser · B pour fermer",
+        layout: "list",
+        list: [
+          {
+            id: "potion",
+            label: "POTION",
+            sub: `× ${game.potions} — rend ${POTION_HEAL} PV`,
+            disabled: game.potions <= 0 || !game.party.length,
+            tone: "bag" as const,
+          },
+          {
+            id: "ball",
+            label: "POKÉ BALL",
+            sub: `× ${game.balls} — seulement en combat`,
+            disabled: true,
+            tone: "bag" as const,
+          },
+          { id: "leave", label: "FERMER", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "pc") {
+      const back = { id: "back", label: "RETOUR", tone: "back" as const };
+      if (phase.on === "retirer") {
+        return {
+          title: "Retirer du PC",
+          hint: "▲ ▼ pour choisir · A pour reprendre · B pour revenir",
+          layout: "list",
+          list: [
+            ...game.box.map((mon, i) => ({
+              id: `box:${i}`,
+              ...monLine(mon),
+              disabled: game.party.length >= PARTY_MAX,
+              tone: "party" as const,
+            })),
+            back,
+          ],
+        };
+      }
+      if (phase.on === "deposer" || phase.on === "ordre") {
+        const depot = phase.on === "deposer";
+        return {
+          title: depot ? "Déposer au PC" : "Mettre en tête",
+          hint: `▲ ▼ pour choisir · A pour ${depot ? "déposer" : "placer"} · B pour revenir`,
+          layout: "list",
+          list: [
+            ...game.party.map((mon, i) => ({
+              id: `${depot ? "dep" : "tete"}:${i}`,
+              ...monLine(mon),
+              disabled: depot ? game.party.length <= 1 : i === 0,
+              tone: "party" as const,
+            })),
+            back,
+          ],
+        };
+      }
+      return {
+        title: `PC de ${game.name || "Dresseur"}`,
+        hint: "▲ ▼ pour choisir · A pour valider · B pour fermer",
+        layout: "list",
+        list: [
+          {
+            id: "retirer",
+            label: "RETIRER",
+            sub: game.box.length ? `${game.box.length} au PC` : "le PC est vide",
+            disabled: !game.box.length || game.party.length >= PARTY_MAX,
+            tone: "party" as const,
+          },
+          {
+            id: "deposer",
+            label: "DÉPOSER",
+            sub: `${game.party.length}/${PARTY_MAX} sur vous`,
+            disabled: game.party.length <= 1,
+            tone: "party" as const,
+          },
+          {
+            id: "ordre",
+            label: "METTRE EN TÊTE",
+            sub: game.party[0] ? `${game.party[0].name} ouvre les combats` : "—",
+            disabled: game.party.length <= 1,
+            tone: "party" as const,
+          },
+          { id: "leave", label: "FERMER", tone: "back" as const },
+        ],
+      };
+    }
+
     if (phase.kind === "name") {
       return {
         title: "Ton nom",
@@ -942,8 +1075,10 @@ export function useGame({
       hint: game.bike
         ? `Croix pour marcher · B pour courir · L pour ${game.riding ? "descendre du" : "monter à"} vélo · A pour interagir`
         : "Croix pour marcher · B pour courir · A pour interagir",
-      layout: "row",
+      // Sept entrées : deux colonnes se lisent mieux qu'une rangée serrée.
+      layout: "grid",
       list: [
+        { id: "sac", label: "SAC", sub: `${game.balls} Ball · ${game.potions} Potion` },
         { id: "carte", label: "CARTE", sub: "START" },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
@@ -957,7 +1092,7 @@ export function useGame({
         { id: "title", label: "TITRE", sub: "SELECT" },
       ],
     };
-  }, [battleUi, phase, game]);
+  }, [battleUi, phase, game, monLine]);
 
   /* ---------------------------------------------------------- entrées */
 
@@ -995,6 +1130,71 @@ export function useGame({
         return;
       }
       if (!choice || choice.disabled) return;
+
+      if (phase.kind === "sac") {
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        if (choice.id === "back") {
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", message: null });
+          return;
+        }
+        if (phase.on === "objets") {
+          setCursor(0);
+          setPhase({ kind: "sac", on: "cible", message: null });
+          return;
+        }
+        const soin = applyPotion(game, Number(choice.id.split(":")[1]));
+        setGame(soin.state);
+        setCursor(0);
+        setPhase({ kind: "sac", on: "objets", message: soin.message });
+        return;
+      }
+
+      if (phase.kind === "pc") {
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        if (choice.id === "back") {
+          setCursor(0);
+          setPhase({ kind: "pc", on: "menu", message: null });
+          return;
+        }
+        if (phase.on === "menu") {
+          setCursor(0);
+          setPhase({
+            kind: "pc",
+            on: choice.id as "retirer" | "deposer" | "ordre",
+            message: null,
+          });
+          return;
+        }
+        const [quoi, rang] = choice.id.split(":");
+        const i = Number(rang);
+        const nom = (quoi === "box" ? game.box : game.party)[i]?.name ?? "Le Pokémon";
+        setGame(
+          quoi === "box"
+            ? withdrawMon(game, i)
+            : quoi === "dep"
+              ? depositMon(game, i)
+              : leadMon(game, i),
+        );
+        setCursor(0);
+        setPhase({
+          kind: "pc",
+          on: "menu",
+          message:
+            quoi === "box"
+              ? `${nom} rejoint votre équipe.`
+              : quoi === "dep"
+                ? `${nom} est confié au PC, en pleine forme.`
+                : `${nom} prend la tête de l'équipe.`,
+        });
+        return;
+      }
 
       if (battleUi) {
         const ui = battleUi;
@@ -1059,7 +1259,10 @@ export function useGame({
       }
 
       if (phase.kind === "world") {
-        if (choice.id === "carte") setPhase({ kind: "carte" });
+        if (choice.id === "sac") {
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", message: null });
+        } else if (choice.id === "carte") setPhase({ kind: "carte" });
         else if (choice.id === "dex") onOpenDex();
         else if (choice.id === "save") save();
         else if (choice.id === "music") setGame((g) => ({ ...g, music: !g.music }));
@@ -1067,7 +1270,7 @@ export function useGame({
         else if (choice.id === "title") onExit();
       }
     },
-    [choices, phase, battleUi, draftName, chooseStarter, runTurn, save, buy, firstReady, onOpenDex, onExit],
+    [choices, phase, game, battleUi, draftName, chooseStarter, runTurn, save, buy, firstReady, onOpenDex, onExit],
   );
 
   const moveCursor = useCallback(
@@ -1128,6 +1331,20 @@ export function useGame({
           else if (button === "down") moveCursor(0, 1);
           else if (button === "a") pick(cursor);
           else if (button === "b") setPhase({ kind: "world" });
+          return;
+
+        case "sac":
+        case "pc":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") {
+            setCursor(0);
+            // B remonte d'un cran : une liste rend la main au menu, le menu ferme.
+            if (phase.on === "objets" || phase.on === "menu") setPhase({ kind: "world" });
+            else if (phase.kind === "sac") setPhase({ kind: "sac", on: "objets", message: null });
+            else setPhase({ kind: "pc", on: "menu", message: null });
+          }
           return;
 
         case "battle": {
@@ -1206,7 +1423,11 @@ export function useGame({
       ? phase.lines[phase.i]
       : phase.kind === "shop"
         ? (phase.message ?? "Que puis-je vous servir ?")
-        : null;
+        : phase.kind === "sac"
+          ? (phase.message ?? "Que sortez-vous du sac ?")
+          : phase.kind === "pc"
+            ? (phase.message ?? "Système de stockage. Que souhaitez-vous faire ?")
+            : null;
 
   /**
    * Sans clavier, il faut pouvoir avancer le texte en touchant la dalle :
@@ -1339,6 +1560,8 @@ export function useGame({
     focus:
       phase.kind === "starter" ||
       phase.kind === "shop" ||
+      phase.kind === "sac" ||
+      phase.kind === "pc" ||
       phase.kind === "bus" ||
       phase.kind === "name" ||
       (battleUi && battleUi.view !== "message")

@@ -549,6 +549,9 @@ export function tryRun(prev: BattleState): Turn {
   return { state, messages };
 }
 
+/** Ce qu'une Potion rend, en combat comme au sac. */
+export const POTION_HEAL = 20;
+
 export function takePotion(prev: BattleState): Turn {
   const state = clone(prev);
   const messages: string[] = [];
@@ -564,7 +567,7 @@ export function takePotion(prev: BattleState): Turn {
   }
 
   state.potions -= 1;
-  const healed = Math.min(20, maxHp(mon) - mon.hp);
+  const healed = Math.min(POTION_HEAL, maxHp(mon) - mon.hp);
   mon.hp += healed;
   messages.push(`${mon.name} récupère ${healed} PV !`);
 

@@ -404,3 +404,39 @@ describe("le Pokémon qui suit", () => {
     expect(spot).toEqual({ x: 5, y: 5, dir: "left" });
   });
 });
+
+describe("les Centres Pokémon", () => {
+  const centres = (Object.entries(MAPS) as [MapId, MapSpec][]).filter(([id]) =>
+    id.startsWith("centre"),
+  );
+
+  it("existent en plusieurs exemplaires", () => {
+    expect(centres.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("ont tous un PC accessible depuis une case libre", () => {
+    for (const [id, map] of centres) {
+      const postes: { x: number; y: number }[] = [];
+      map.tiles.forEach((row, y) => {
+        [...row].forEach((c, x) => {
+          if (TILES[c]?.kind === "pc") postes.push({ x, y });
+        });
+      });
+      expect(postes.length, `${id} : aucun PC`).toBe(1);
+
+      // On s'en sert en lui faisant face : il faut une case libre autour.
+      const { x, y } = postes[0];
+      const abords = [
+        [x, y + 1], [x, y - 1], [x - 1, y], [x + 1, y],
+      ].filter(([ax, ay]) => walkable(map, ax, ay, map.npcs));
+      expect(abords.length, `${id} : PC inaccessible`).toBeGreaterThan(0);
+    }
+  });
+
+  it("gardent leur infirmière et leur comptoir", () => {
+    for (const [id, map] of centres) {
+      expect(map.npcs.some((n) => n.heals), `${id} : personne pour soigner`).toBe(true);
+      expect(map.indoor, `${id} : devrait être un intérieur`).toBe(true);
+    }
+  });
+});
