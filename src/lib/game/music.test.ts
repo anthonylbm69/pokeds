@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TRACKS, frequency, parseVoice, voiceLength } from "./music";
+import { MAPS } from "./world";
+import { TRACKS, frequency, parseVoice, trackForMap, voiceLength } from "./music";
 
 describe("hauteurs", () => {
   it("place le la du diapason et ses octaves", () => {
@@ -22,6 +23,45 @@ describe("lecture d'une voix", () => {
       { note: "-", len: 2 },
       { note: "G4", len: 2 },
     ]);
+  });
+});
+
+describe("le thème de chaque lieu", () => {
+  const lieux = Object.keys(MAPS);
+
+  it("existe, et boucle, pour toutes les cartes", () => {
+    for (const lieu of lieux) {
+      const piste = trackForMap(lieu);
+      expect(TRACKS[piste], `${lieu} → piste inconnue`).toBeDefined();
+      expect(TRACKS[piste].loop, `${lieu} → ${piste} ne boucle pas`).toBe(true);
+    }
+  });
+
+  it("donne aux trois Arènes le thème de combat", () => {
+    for (const arene of ["arene", "arene2", "arene3"]) {
+      expect(trackForMap(arene), arene).toBe("dresseur");
+    }
+  });
+
+  it("donne au Plateau et à ses cinq salles le thème de la Ligue", () => {
+    for (const salle of ["ligue", "ligue1", "ligue2", "ligue3", "ligue4", "ligue5"]) {
+      expect(trackForMap(salle), salle).toBe("ligue");
+    }
+  });
+
+  it("distingue les sables et les cimes des routes ordinaires", () => {
+    expect(trackForMap("route5")).toBe("desert");
+    expect(trackForMap("route6")).toBe("cime");
+    expect(trackForMap("route7")).toBe("cime");
+    expect(trackForMap("route8")).toBe("cime");
+    expect(trackForMap("route1")).toBe("route");
+    expect(trackForMap("route4")).toBe("route");
+  });
+
+  it("laisse villes et intérieurs sur le thème de ville", () => {
+    for (const lieu of ["bourg", "maillard", "aigueperse", "mions", "centre", "maison"]) {
+      expect(trackForMap(lieu), lieu).toBe("ville");
+    }
   });
 });
 

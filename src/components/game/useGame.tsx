@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
-import { TRACKS, music, type TrackId } from "@/lib/game/music";
+import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import { MOVES, TYPE_FR, species } from "@/lib/game/data";
 import {
   activeMon,
@@ -498,6 +498,19 @@ export function useGame({
       return;
     }
     if (tileAt(map, tx, ty)?.kind === "bus") {
+      // Sans Pokémon, le car serait un moyen de contourner le bourg.
+      if (!hasFlag(game, "starter")) {
+        setPhase({
+          kind: "text",
+          lines: [
+            "Le chauffeur vous arrête d'un geste.",
+            "« Personne ne quitte le bourg sans Pokémon. Va donc voir le Professeur. »",
+          ],
+          i: 0,
+          then: null,
+        });
+        return;
+      }
       setCursor(0);
       setPhase({ kind: "bus" });
       return;
@@ -507,7 +520,7 @@ export function useGame({
     if (sign) {
       setPhase({ kind: "text", lines: sign.text, i: 0, then: null });
     }
-  }, [map, talk]);
+  }, [map, talk, game]);
 
   /* --------------------------------------------------- les Cars Faure */
 
@@ -1150,8 +1163,7 @@ export function useGame({
     if (phase.kind === "battle") {
       return phase.ui.origin.kind === "dresseur" ? "dresseur" : "combat";
     }
-    if (game.map === "arene") return "dresseur";
-    return game.map.startsWith("route") ? "route" : "ville";
+    return trackForMap(game.map);
   }, [phase, game.map]);
 
   useEffect(() => {

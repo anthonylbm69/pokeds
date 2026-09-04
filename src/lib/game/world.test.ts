@@ -100,6 +100,67 @@ describe("les liaisons entre cartes", () => {
   });
 });
 
+describe("les portes conditionnelles", () => {
+  it("retiennent le joueur au bourg tant qu'il n'a pas de Pokémon", () => {
+    const sorties = MAPS.bourg.warps.filter((w) => w.to === "route1");
+    expect(sorties.length).toBeGreaterThan(0);
+    for (const sortie of sorties) {
+      expect(sortie.needs, "sortie nord libre").toContain("starter");
+      expect(sortie.refusal?.length, "refus sans réplique").toBeGreaterThan(0);
+    }
+  });
+
+  it("réservent le Plateau aux trois insignes", () => {
+    const portes = MAPS.route8.warps.filter((w) => w.to === "ligue");
+    expect(portes.length).toBeGreaterThan(0);
+    for (const porte of portes) {
+      expect(porte.needs ?? []).toHaveLength(0);
+    }
+    const entrees = MAPS.ligue.warps.filter((w) => w.to === "ligue1");
+    expect(entrees.length).toBeGreaterThan(0);
+    for (const entree of entrees) {
+      expect(entree.needs).toEqual([
+        "insigne:trio",
+        "insigne:sylve",
+        "insigne:roc",
+      ]);
+    }
+  });
+
+  it("n'ouvrent une salle de la Ligue qu'après le membre précédent", () => {
+    const suite: [MapId, MapId, string][] = [
+      ["ligue1", "ligue2", "battu:ligue-yen"],
+      ["ligue2", "ligue3", "battu:ligue-christina"],
+      ["ligue3", "ligue4", "battu:ligue-will"],
+      ["ligue4", "ligue5", "battu:ligue-vic"],
+    ];
+    for (const [depuis, vers, marqueur] of suite) {
+      const portes = MAPS[depuis].warps.filter((w) => w.to === vers);
+      expect(portes.length, `${depuis} → ${vers}`).toBeGreaterThan(0);
+      for (const porte of portes) {
+        expect(porte.needs, `${depuis} → ${vers}`).toContain(marqueur);
+      }
+    }
+  });
+
+  it("ne réclame jamais un marqueur que rien ne délivre", () => {
+    const delivres = new Set(["starter"]);
+    for (const map of Object.values(MAPS)) {
+      for (const npc of map.npcs) {
+        delivres.add(`battu:${npc.id}`);
+        if (npc.trainer?.badge) delivres.add(`insigne:${npc.trainer.badge}`);
+      }
+    }
+    for (const [id, map] of maps) {
+      for (const warp of map.warps) {
+        for (const besoin of warp.needs ?? []) {
+          expect(delivres.has(besoin), `${id} exige « ${besoin} », jamais délivré`).toBe(true);
+        }
+      }
+    }
+  });
+});
+
 describe("la carte de la région", () => {
   it("ne cite que des lieux existants, bien placés", () => {
     for (const node of REGION) {

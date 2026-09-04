@@ -156,8 +156,34 @@ export const MAPS: Record<MapId, MapSpec> = {
       },
     ],
     warps: [
-      { x: 9, y: 0, to: "route1", tx: 9, ty: 18, dir: "up" },
-      { x: 10, y: 0, to: "route1", tx: 10, ty: 18, dir: "up" },
+      // On ne quitte pas le bourg les mains vides : le Professeur attend
+      // devant son laboratoire tant que le starter n'a pas été choisi.
+      {
+        x: 9,
+        y: 0,
+        to: "route1",
+        tx: 9,
+        ty: 18,
+        dir: "up",
+        needs: ["starter"],
+        refusal: [
+          "Attends ! Les hautes herbes grouillent de Pokémon sauvages.",
+          "Va d'abord voir le Professeur Keteleeria, devant son laboratoire au sud.",
+        ],
+      },
+      {
+        x: 10,
+        y: 0,
+        to: "route1",
+        tx: 10,
+        ty: 18,
+        dir: "up",
+        needs: ["starter"],
+        refusal: [
+          "Attends ! Les hautes herbes grouillent de Pokémon sauvages.",
+          "Va d'abord voir le Professeur Keteleeria, devant son laboratoire au sud.",
+        ],
+      },
       { x: 6, y: 5, to: "maison", tx: 4, ty: 6, dir: "up" },
     ],
     signs: [

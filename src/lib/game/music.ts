@@ -160,6 +160,82 @@ export const TRACKS = {
     ],
   },
 
+  /* Les sables : ré mineur teinté de seconde bémol, lancinant. */
+  desert: {
+    tempo: 132,
+    loop: true,
+    voices: [
+      {
+        wave: "square",
+        gain: 0.15,
+        source: `
+          D4:4 Eb4:4 F4:4 D4:4
+          G4:4 F4:2 Eb4:2 D4:8
+          A4:4 Bb4:4 A4:4 F4:4
+          Eb4:4 D4:4 C4:4 D4:4
+        `,
+      },
+      {
+        wave: "triangle",
+        gain: 0.19,
+        source: "D3:8 D3:8 Bb2:8 Bb2:8 F3:8 F3:8 A2:8 A2:8",
+      },
+    ],
+  },
+
+  /* Les cimes : la mineur, lent et aéré, pour la neige et la crête. */
+  cime: {
+    tempo: 96,
+    loop: true,
+    voices: [
+      {
+        wave: "triangle",
+        gain: 0.18,
+        source: `
+          A4:8 C5:8
+          E5:8 D5:4 C5:4
+          B4:8 G4:8
+          A4:8 -:8
+        `,
+      },
+      {
+        wave: "square",
+        gain: 0.1,
+        hold: 0.9,
+        source: "A2:8 A2:8 F2:8 F2:8 G2:8 G2:8 A2:8 A2:8",
+      },
+    ],
+  },
+
+  /* La Ligue : mi mineur, ample et pressant. */
+  ligue: {
+    tempo: 160,
+    loop: true,
+    voices: [
+      {
+        wave: "square",
+        gain: 0.16,
+        source: `
+          E4:2 B4:2 E5:4 D5:2 C5:2 B4:4
+          A4:2 B4:2 C5:4 B4:2 A4:2 G4:4
+          F#4:2 A4:2 D5:4 C5:2 B4:2 A4:4
+          G4:2 F#4:2 E4:4 B4:4 E5:4
+        `,
+      },
+      {
+        wave: "sawtooth",
+        gain: 0.12,
+        hold: 0.5,
+        source: `
+          E2:2 E2:2 E2:2 E2:2 E2:2 E2:2 E2:2 E2:2
+          C3:2 C3:2 C3:2 C3:2 C3:2 C3:2 C3:2 C3:2
+          D3:2 D3:2 D3:2 D3:2 D3:2 D3:2 D3:2 D3:2
+          B2:2 B2:2 B2:2 B2:2 B2:2 B2:2 B2:2 B2:2
+        `,
+      },
+    ],
+  },
+
   /* Jingle de soin, joué une fois. */
   soin: {
     tempo: 132,
@@ -180,6 +256,19 @@ export const TRACKS = {
     ],
   },
 } as const satisfies Record<string, Track>;
+
+/**
+ * Le thème d'un lieu. Les préfixes comptent : toute nouvelle Arène ou salle
+ * de Ligue hérite du bon morceau sans qu'on ait à y penser — c'est l'oubli
+ * qui avait laissé deux Arènes sur la musique de ville.
+ */
+export function trackForMap(map: string): TrackId {
+  if (map.startsWith("arene")) return "dresseur";
+  if (map.startsWith("ligue")) return "ligue";
+  if (map === "route5") return "desert";
+  if (map === "route6" || map === "route7" || map === "route8") return "cime";
+  return map.startsWith("route") ? "route" : "ville";
+}
 
 type Event = { note: string; len: number; voice: Voice };
 
