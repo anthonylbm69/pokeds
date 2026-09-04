@@ -12,6 +12,7 @@ import {
   PARTY_MAX,
   addCaught,
   applyItem,
+  followerLine,
   depositMon,
   leadMon,
   withdrawMon,
@@ -214,5 +215,45 @@ describe("le sac hors combat", () => {
     avant.party[1].hp = 5;
     const { state } = applyItem(avant, "potion", 0);
     expect(state.party[1].hp).toBe(5);
+  });
+});
+
+describe("les répliques du suiveur", () => {
+  const solide = (id: number, level = 30) => createMon(id, level, false);
+
+  it("répondent quelque chose pour chaque espèce du Pokédex", () => {
+    for (const id of [1, 25, 133, 151, 448, 497, 649]) {
+      const lignes = followerLine(solide(id));
+      expect(lignes.length, `${id} muet`).toBeGreaterThan(0);
+      for (const l of lignes) expect(l.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("nomment le Pokémon, surnom compris", () => {
+    const mon = { ...solide(25), name: "Pikou" };
+    expect(followerLine(mon)[0]).toContain("Pikou");
+  });
+
+  it("signalent un Pokémon au tapis plutôt que son humeur", () => {
+    const mon = solide(25);
+    mon.hp = 0;
+    expect(followerLine(mon).join(" ")).toContain("Centre");
+  });
+
+  it("signalent une altération", () => {
+    const mon = solide(25);
+    mon.status = "poison";
+    expect(followerLine(mon).join(" ")).toContain("empoisonné");
+  });
+
+  it("s'inquiètent quand il est bas, avant de parler d'humeur", () => {
+    const mon = solide(25);
+    mon.hp = 1;
+    expect(followerLine(mon).join(" ")).toContain("patte");
+  });
+
+  it("changent de ton selon le type", () => {
+    // Un Feu et un Eau ne disent pas la même chose en pleine forme.
+    expect(followerLine(solide(498))[0]).not.toBe(followerLine(solide(501))[0]);
   });
 });

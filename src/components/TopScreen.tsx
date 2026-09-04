@@ -62,6 +62,15 @@ export default function TopScreen({
       <div className="dex__body">
         <figure className="stage">
           <div className="stage__halo" />
+          {/* L'illustration officielle, en filigrane derrière le sprite. */}
+          <img
+            key={`art-${detail.id}`}
+            className="stage__art"
+            src={detail.artwork}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+          />
           {/* Sprite animé Génération V — l'image même de Noir/Blanc. */}
           <img
             key={detail.id}

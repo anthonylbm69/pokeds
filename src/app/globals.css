@@ -995,6 +995,19 @@ body::before {
   }
 }
 
+/* L'illustration officielle, posée en filigrane derrière le sprite. */
+.stage__art {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 78%;
+  height: 78%;
+  object-fit: contain;
+  opacity: 0.14;
+  filter: saturate(1.2);
+  pointer-events: none;
+}
+
 .stage__sprite {
   position: relative;
   z-index: 1;

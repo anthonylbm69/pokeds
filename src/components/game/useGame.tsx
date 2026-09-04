@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
-import { MOVES, TYPE_FR, species } from "@/lib/game/data";
+import {
+  MOVES,
+  TYPE_FR,
+  effectiveness,
+  expForLevel,
+  species,
+  type MoveId,
+} from "@/lib/game/data";
 import {
   ITEMS,
   ITEM_ORDER,
@@ -15,8 +22,10 @@ import {
 import {
   activeMon,
   createMon,
+  STATUS_FR,
   isKo,
   maxHp,
+  statOf,
   playerMove,
   startTrainer,
   startWild,
@@ -32,6 +41,7 @@ import {
   MAPS,
   STEP,
   busStopOf,
+  followerSpot,
   rollEncounter,
   seesPlayer,
   signAt,
@@ -47,6 +57,7 @@ import {
   STARTERS,
   addCaught,
   counterStarter,
+  followerLine,
   depositMon,
   giveStarter,
   hasFlag,
@@ -114,6 +125,9 @@ type Phase =
   | { kind: "voyage"; to: MapId; label: string }
   | { kind: "shop"; counter: Counter; message: string | null }
   | { kind: "sac"; on: "objets" | "cible"; item?: ItemId; message: string | null }
+  | { kind: "equipe" }
+  | { kind: "fiche"; index: number }
+  | { kind: "surnom"; mon: Mon }
   | { kind: "pc"; on: "menu" | "retirer" | "deposer" | "ordre"; message: string | null }
   | { kind: "battle"; ui: BattleUi };
 
@@ -133,6 +147,22 @@ const INTRO = [
 ];
 
 const ENCOUNTER_RATE = 0.14;
+
+/**
+ * Ce que vaut une attaque contre l'adversaire du moment, écrit en clair.
+ * Rien n'est révélé pour une attaque de statut, qui ne suit pas la table.
+ */
+function efficaciteContre(move: MoveId, foe: Mon): string {
+  const mv = MOVES[move];
+  if (mv.category === "statut") return "";
+  const eff = effectiveness(mv.type, species(foe.id).types);
+  if (eff === 0) return " · sans effet";
+  if (eff > 1.5) return " · très efficace";
+  if (eff > 1) return " · efficace";
+  if (eff < 0.5) return " · quasi sans effet";
+  if (eff < 1) return " · peu efficace";
+  return "";
+}
 
 /** La note qui suit le décompte d'un objet : ce qu'il fait, en trois mots. */
 function itemHint(id: ItemId): string {
@@ -172,6 +202,8 @@ export function useGame({
 }): GameParts {
   const [game, setGame] = useState<GameState>(() => newGame(""));
   const [phase, setPhase] = useState<Phase>({ kind: "intro", step: 0 });
+  /** Pokémon tout juste capturé, à qui l'on proposera un surnom. */
+  const [aBaptiser, setABaptiser] = useState<Mon | null>(null);
   const [cursor, setCursor] = useState(0);
   const [draftName, setDraftName] = useState("");
 
@@ -424,6 +456,8 @@ export function useGame({
             ? `${s.caught.name} est transféré au PC : votre équipe est pleine.`
             : `Les données de ${s.caught.name} sont ajoutées au Pokédex.`,
         );
+        // Le baptême attend la fin des messages du combat.
+        setABaptiser(s.caught);
       }
 
       if (s.outcome === "victoire") music.play("victoire");
@@ -601,6 +635,16 @@ export function useGame({
       return;
     }
 
+    // Le Pokémon de tête occupe la case que l'on vient de quitter.
+    const suiveur = walker ? followerSpot(player.current) : null;
+    if (suiveur && Math.round(suiveur.x) === tx && Math.round(suiveur.y) === ty) {
+      const lead = game.party.find((m) => !isKo(m));
+      if (lead) {
+        setPhase({ kind: "text", lines: followerLine(lead), i: 0, then: null });
+        return;
+      }
+    }
+
     if (tileAt(map, tx, ty)?.kind === "pc") {
       setCursor(0);
       setPhase({ kind: "pc", on: "menu", message: null });
@@ -611,7 +655,7 @@ export function useGame({
     if (sign) {
       setPhase({ kind: "text", lines: sign.text, i: 0, then: null });
     }
-  }, [map, talk, game]);
+  }, [map, talk, game, walker]);
 
   /* --------------------------------------------------- les Cars Faure */
 
@@ -675,6 +719,16 @@ export function useGame({
 
   const resolveThen = useCallback(
     (then: Then | null) => {
+      // Un Pokémon vient d'être pris : on lui propose un surnom avant de
+      // rendre la main au monde.
+      if (aBaptiser) {
+        const pris = aBaptiser;
+        setABaptiser(null);
+        setDraftName("");
+        setPhase({ kind: "surnom", mon: pris });
+        setTimeout(() => nameRef.current?.focus(), 40);
+        return;
+      }
       if (!then) {
         setPhase({ kind: "world" });
         return;
@@ -714,7 +768,7 @@ export function useGame({
           setPhase({ kind: "world" });
       }
     },
-    [game, startTrainerBattle, startStaticBattle],
+    [game, aBaptiser, startTrainerBattle, startStaticBattle],
   );
 
   /** Achat d'un article : le comptoir reste ouvert pour enchaîner. */
@@ -904,7 +958,10 @@ export function useGame({
             ...mine.moves.map((m) => ({
               id: m.id,
               label: MOVES[m.id].name,
-              sub: `${TYPE_FR[MOVES[m.id].type]} · ${m.pp}/${m.max} PP`,
+              sub: `${TYPE_FR[MOVES[m.id].type]} · ${m.pp}/${m.max} PP${efficaciteContre(
+                m.id,
+                s.foe,
+              )}`,
               disabled: m.pp <= 0,
               tone: "fight" as const,
             })),
@@ -1152,6 +1209,80 @@ export function useGame({
       };
     }
 
+    if (phase.kind === "equipe") {
+      return {
+        title: "Équipe",
+        hint: "▲ ▼ pour choisir · A pour la fiche · B pour fermer",
+        layout: "list",
+        list: [
+          ...game.party.map((mon, i) => ({
+            id: `fiche:${i}`,
+            ...monLine(mon),
+            tone: "party" as const,
+          })),
+          { id: "leave", label: "FERMER", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "fiche") {
+      const mon = game.party[phase.index];
+      if (!mon) {
+        return { title: "Fiche", hint: "B pour revenir", layout: "list", list: [] };
+      }
+      const socle = expForLevel(mon.level);
+      const palier = expForLevel(mon.level + 1);
+      return {
+        title: `${mon.name}${mon.shiny ? " ✦" : ""}`,
+        hint: "◀ ▶ pour changer de Pokémon · B pour revenir",
+        layout: "list",
+        list: [
+          {
+            id: "espece",
+            label: `N.${mon.level} · ${species(mon.id).name}`,
+            sub: `${species(mon.id).types.map((t) => TYPE_FR[t]).join(" / ")} — ${species(mon.id).genus}`,
+            disabled: true,
+            tone: "party" as const,
+          },
+          {
+            id: "vitalite",
+            label: `PV ${mon.hp} / ${maxHp(mon)}`,
+            sub: mon.status
+              ? `${STATUS_FR[mon.status]}`
+              : `${Math.max(0, palier - mon.exp)} points d'exp. avant le niveau ${mon.level + 1}`,
+            disabled: true,
+            tone: "plain" as const,
+          },
+          {
+            id: "stats",
+            label: `Att ${statOf(mon, "atk")} · Déf ${statOf(mon, "def")} · Vit ${statOf(mon, "spe")}`,
+            sub: `Att.Spé ${statOf(mon, "spa")} · Déf.Spé ${statOf(mon, "spd")} — exp. ${mon.exp - socle}`,
+            disabled: true,
+            tone: "plain" as const,
+          },
+          ...mon.moves.map((m, i) => ({
+            id: `att:${i}`,
+            label: MOVES[m.id].name,
+            sub: `${TYPE_FR[MOVES[m.id].type]} · ${
+              MOVES[m.id].power ? `puissance ${MOVES[m.id].power}` : "statut"
+            } · PP ${m.pp}/${m.max}`,
+            disabled: true,
+            tone: "fight" as const,
+          })),
+          { id: "leave", label: "RETOUR", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "surnom") {
+      return {
+        title: `${phase.mon.name} vient d'être capturé`,
+        hint: "Laissez vide pour garder son nom d'espèce",
+        layout: "row",
+        list: [{ id: "ok", label: "VALIDER", tone: "fight" }],
+      };
+    }
+
     if (phase.kind === "name") {
       return {
         title: "Ton nom",
@@ -1179,6 +1310,12 @@ export function useGame({
       layout: "grid",
       list: [
         { id: "sac", label: "SAC", sub: `${sacTotal} objet${sacTotal > 1 ? "s" : ""}` },
+        {
+          id: "equipe",
+          label: "ÉQUIPE",
+          sub: game.party.length ? `${game.party.length} Pokémon` : "—",
+          disabled: !game.party.length,
+        },
         { id: "carte", label: "CARTE", sub: "START" },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
@@ -1230,6 +1367,38 @@ export function useGame({
         return;
       }
       if (!choice || choice.disabled) return;
+
+      if (phase.kind === "surnom") {
+        const surnom = draftName.trim().slice(0, 12);
+        if (surnom) {
+          const cible = phase.mon.uid;
+          const renomme = (m: Mon) => (m.uid === cible ? { ...m, name: surnom } : m);
+          setGame((g) => ({
+            ...g,
+            party: g.party.map(renomme),
+            box: g.box.map(renomme),
+          }));
+        }
+        setDraftName("");
+        setPhase({ kind: "world" });
+        return;
+      }
+
+      if (phase.kind === "equipe") {
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        setCursor(0);
+        setPhase({ kind: "fiche", index: Number(choice.id.split(":")[1]) });
+        return;
+      }
+
+      if (phase.kind === "fiche") {
+        setCursor(0);
+        setPhase({ kind: "equipe" });
+        return;
+      }
 
       if (phase.kind === "sac") {
         if (choice.id === "leave") {
@@ -1376,6 +1545,9 @@ export function useGame({
         if (choice.id === "sac") {
           setCursor(0);
           setPhase({ kind: "sac", on: "objets", message: null });
+        } else if (choice.id === "equipe") {
+          setCursor(0);
+          setPhase({ kind: "equipe" });
         } else if (choice.id === "carte") setPhase({ kind: "carte" });
         else if (choice.id === "dex") onOpenDex();
         else if (choice.id === "save") save();
@@ -1447,6 +1619,29 @@ export function useGame({
           else if (button === "b") setPhase({ kind: "world" });
           return;
 
+        case "equipe":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") setPhase({ kind: "world" });
+          return;
+
+        case "fiche":
+          // Les flèches feuillettent l'équipe sans repasser par la liste.
+          if (button === "left" || button === "right") {
+            const pas = button === "right" ? 1 : -1;
+            const suivant = (phase.index + pas + game.party.length) % game.party.length;
+            setPhase({ kind: "fiche", index: suivant });
+          } else if (button === "a" || button === "b") {
+            setCursor(0);
+            setPhase({ kind: "equipe" });
+          }
+          return;
+
+        case "surnom":
+          if (button === "a" || button === "start") pick(0);
+          return;
+
         case "sac":
         case "pc":
           if (button === "up") moveCursor(0, -1);
@@ -1506,7 +1701,7 @@ export function useGame({
           return;
       }
     },
-    [active, phase, cursor, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
+    [active, phase, cursor, game.party.length, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
   );
 
   /* ---------------------------------------------------------- musique */
@@ -1656,7 +1851,7 @@ export function useGame({
       active={battleUi ? battleUi.state.active : -1}
       starters={phase.kind === "starter" ? STARTERS : undefined}
       showParty={phase.kind !== "intro" && phase.kind !== "name"}
-      naming={phase.kind === "name"}
+      naming={phase.kind === "name" || phase.kind === "surnom"}
       nameValue={draftName}
       onNameChange={setDraftName}
       nameRef={nameRef}
@@ -1676,6 +1871,9 @@ export function useGame({
       phase.kind === "shop" ||
       phase.kind === "sac" ||
       phase.kind === "pc" ||
+      phase.kind === "equipe" ||
+      phase.kind === "fiche" ||
+      phase.kind === "surnom" ||
       phase.kind === "bus" ||
       phase.kind === "name" ||
       (battleUi && battleUi.view !== "message")

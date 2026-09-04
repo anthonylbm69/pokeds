@@ -4,7 +4,8 @@
  */
 
 import { MOVES, type MoveId } from "./data";
-import { createMon, healMon, maxHp, type Mon } from "./battle";
+import { STATUS_FR, createMon, healMon, maxHp, type Mon } from "./battle";
+import { species, type TypeName } from "./data";
 import {
   ITEMS,
   countOf,
@@ -168,6 +169,59 @@ export const addCaught = (state: GameState, mon: Mon): GameState => ({
   caught: [...new Set([...state.caught, mon.id])],
   seen: [...new Set([...state.seen, mon.id])],
 });
+
+/**
+ * Ce que raconte le Pokémon qui marche derrière soi quand on lui parle. Son
+ * humeur tient à son état : blessé, altéré, ou simplement content d'être là.
+ * Le type donne la couleur de la réplique.
+ */
+export function followerLine(mon: Mon): string[] {
+  const ratio = mon.hp / maxHp(mon);
+
+  if (mon.hp <= 0) {
+    return [
+      `${mon.name} est hors de combat et ne bronche pas.`,
+      "Un passage au Centre Pokémon lui ferait le plus grand bien.",
+    ];
+  }
+  if (mon.status) {
+    return [
+      `${mon.name} vous regarde, ${STATUS_FR[mon.status]}.`,
+      "Il faudrait s'occuper de lui.",
+    ];
+  }
+  if (ratio < 0.35) {
+    return [
+      `${mon.name} traîne la patte derrière vous.`,
+      "Il tiendra encore un peu, mais pas beaucoup plus.",
+    ];
+  }
+
+  const humeur = HUMEURS[species(mon.id).types[0]] ?? HUMEURS.normal;
+  return [`${mon.name} ${humeur}`];
+}
+
+/** Une réplique par type : la même espèce dit toujours la même chose. */
+const HUMEURS: Partial<Record<TypeName, string>> = {
+  normal: "trottine gaiement à votre hauteur.",
+  fire: "souffle un panache tiède et vous regarde, ravi.",
+  water: "s'ébroue et vous éclabousse les chaussures.",
+  grass: "s'étire vers le soleil avant de vous rattraper.",
+  electric: "crépite doucement quand vous le caressez.",
+  ice: "laisse derrière lui une trace de givre.",
+  fighting: "frappe l'air deux fois, prêt au prochain duel.",
+  poison: "renifle bruyamment quelque chose au sol.",
+  ground: "gratte la terre du bout de la patte.",
+  flying: "fait un tour en l'air et se repose près de vous.",
+  psychic: "vous fixe, et vous avez l'étrange impression d'être compris.",
+  bug: "s'agite dans tous les sens, infatigable.",
+  rock: "avance sans se presser, imperturbable.",
+  ghost: "disparaît une seconde, puis réapparaît en riant.",
+  dragon: "gronde doucement, tout en fierté contenue.",
+  dark: "vous observe du coin de l'œil, l'air de tout savoir.",
+  steel: "cliquette à chaque pas sur le chemin.",
+  fairy: "tourne autour de vous en pépiant.",
+};
 
 /* -------------------------------------------------------------------- PC */
 

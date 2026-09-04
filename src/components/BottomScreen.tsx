@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import {
   GENERATIONS,
-  displayName,
   iconUrl,
   padDex,
   staticUrl,
@@ -149,7 +148,7 @@ export default function BottomScreen({
                   }}
                 />
                 <span className="row__no">{padDex(entry.id)}</span>
-                <span className="row__name">{displayName(entry.name)}</span>
+                <span className="row__name">{entry.name}</span>
               </button>
             </li>
           );

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GENERATIONS,
-  displayName,
   fetchIndex,
   fetchPokemon,
   padDex,
@@ -33,6 +32,13 @@ export const DEX_LABELS: Partial<Record<DsButton, string>> = {
 };
 
 /** Le mode Pokédex de la console : les deux écrans et ses commandes. */
+/** Pour que « leviator » trouve Léviator : minuscules et accents ôtés. */
+const sansAccent = (texte: string) =>
+  texte
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+
 export function usePokedex({
   index: initialIndex,
   active,
@@ -118,17 +124,13 @@ export function usePokedex({
 
   const entries = useMemo(() => {
     const range = GENERATIONS.find((g) => g.id === gen) ?? GENERATIONS[0];
-    const q = query.trim().toLowerCase();
+    const q = sansAccent(query.trim());
     const known = only?.length ? new Set(only) : null;
     return index.filter((entry) => {
       if (known && !known.has(entry.id)) return false;
       if (entry.id < range.from || entry.id > range.to) return false;
       if (!q) return true;
-      return (
-        entry.name.includes(q) ||
-        displayName(entry.name).toLowerCase().includes(q) ||
-        padDex(entry.id).startsWith(q)
-      );
+      return sansAccent(entry.name).includes(q) || padDex(entry.id).startsWith(q);
     });
   }, [index, gen, query, only]);
 

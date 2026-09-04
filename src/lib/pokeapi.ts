@@ -4,6 +4,8 @@
  * d'éviter 1025 requêtes API rien que pour peupler la liste du Pokédex.
  */
 
+import { DEX } from "./game/dex";
+
 const API = "https://pokeapi.co/api/v2";
 const SPRITES =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon";
@@ -182,21 +184,45 @@ export const formatWeight = (hg: number) => `${(hg / 10).toFixed(1)} kg`;
 
 /* -------------------------------------------------------------------- fetch */
 
+/** Au-delà, on considère que la PokéAPI ne répondra pas. */
+const TIMEOUT_MS = 12000;
+
 async function getJson<T>(url: string, revalidate = 604800): Promise<T> {
-  const res = await fetch(url, { next: { revalidate } });
-  if (!res.ok) throw new Error(`PokéAPI ${res.status} sur ${url}`);
-  return res.json() as Promise<T>;
+  // Sans garde-fou, une requête qui n'aboutit jamais laisse le Pokédex à
+  // « chargement » indéfiniment.
+  const stop = new AbortController();
+  const minuteur = setTimeout(() => stop.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { next: { revalidate }, signal: stop.signal });
+    if (!res.ok) throw new Error(`PokéAPI ${res.status} sur ${url}`);
+    return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`La PokéAPI n'a pas répondu à temps sur ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(minuteur);
+  }
 }
 
 const idFromUrl = (url: string): number =>
   Number(url.split("/").filter(Boolean).pop());
 
-/** Liste complète du Pokédex National (numéro + nom), en une seule requête. */
+/**
+ * Liste complète du Pokédex National (numéro + nom), en une seule requête.
+ * L'API ne rend que des noms anglais ; pour les six cent quarante-neuf
+ * premiers, la table locale a déjà le nom français, et la liste s'accorde
+ * enfin avec la fiche qu'elle ouvre.
+ */
 export async function fetchIndex(): Promise<IndexEntry[]> {
   const data = await getJson<{ results: { name: string; url: string }[] }>(
     `${API}/pokemon?limit=${NATIONAL_DEX_MAX}`,
   );
-  return data.results.map((r) => ({ id: idFromUrl(r.url), name: r.name }));
+  return data.results.map((r) => {
+    const id = idFromUrl(r.url);
+    return { id, name: DEX[id]?.[0] ?? displayName(r.name) };
+  });
 }
 
 const STAT_LABELS: Record<string, string> = {
