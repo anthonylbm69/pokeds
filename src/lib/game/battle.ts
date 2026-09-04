@@ -27,7 +27,15 @@ export type Mon = {
   ivs: Record<StatKey, number>;
   hp: number;
   moves: { id: MoveId; pp: number; max: number }[];
+  /** Chromatique : livrée rare, purement cosmétique. */
+  shiny: boolean;
 };
+
+/**
+ * Une chance sur cinq cent douze. Les jeux d'origine sont bien plus avares,
+ * mais sur une partie de cette taille on ne croiserait jamais personne.
+ */
+export const SHINY_RATE = 1 / 512;
 
 export type Stages = Record<Exclude<StatKey, "hp"> | "acc", number>;
 
@@ -55,7 +63,7 @@ function movesAtLevel(id: number, level: number) {
   }));
 }
 
-export function createMon(id: number, level: number): Mon {
+export function createMon(id: number, level: number, shiny?: boolean): Mon {
   const ivs: Record<StatKey, number> = {
     hp: roll(32), atk: roll(32), def: roll(32),
     spa: roll(32), spd: roll(32), spe: roll(32),
@@ -69,6 +77,7 @@ export function createMon(id: number, level: number): Mon {
     ivs,
     hp: 0,
     moves: movesAtLevel(id, level),
+    shiny: shiny ?? rand() < SHINY_RATE,
   };
   mon.hp = maxHp(mon);
   return mon;

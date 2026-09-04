@@ -293,7 +293,11 @@ export function useGame({
       const state = startWild(game.party, foe, { balls: game.balls, potions: game.potions });
       openBattle(
         state,
-        [`Un ${foe.name} sauvage apparaît !`, `En avant, ${activeMon(state).name} !`],
+        [
+          `Un ${foe.name} sauvage apparaît !`,
+          ...(foe.shiny ? ["✦ Sa livrée scintille d'un éclat rare !"] : []),
+          `En avant, ${activeMon(state).name} !`,
+        ],
         { kind: "sauvage" },
       );
     },

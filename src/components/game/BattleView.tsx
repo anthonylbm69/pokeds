@@ -29,6 +29,17 @@ function HpBar({ mon }: { mon: Mon }) {
   );
 }
 
+/** Les étoiles qui saluent l'entrée d'un chromatique. */
+function Sparks() {
+  return (
+    <span className="sparks" aria-hidden="true">
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <i key={i} />
+      ))}
+    </span>
+  );
+}
+
 function Plate({ mon, own }: { mon: Mon; own: boolean }) {
   const max = maxHp(mon);
   const floor = expForLevel(mon.level);
@@ -37,6 +48,11 @@ function Plate({ mon, own }: { mon: Mon; own: boolean }) {
     <div className={`plate${own ? " plate--own" : ""}`}>
       <div className="plate__row">
         <span className="plate__name">{mon.name}</span>
+        {mon.shiny && (
+          <span className="shiny-mark" title="Chromatique">
+            ✦
+          </span>
+        )}
         <span className="plate__lvl">N.{mon.level}</span>
       </div>
       <div className="plate__row">
@@ -80,13 +96,14 @@ export default function BattleView({ state, message, throwing, trainerSprite }: 
             <img
               key={`foe-${foe.uid}`}
               className={`battle__sprite${foe.hp <= 0 ? " battle__sprite--down" : ""}`}
-              src={animatedUrl(foe.id) ?? staticUrl(foe.id)}
+              src={animatedUrl(foe.id, foe.shiny) ?? staticUrl(foe.id, foe.shiny)}
               alt={foe.name}
               onError={(e) => {
-                e.currentTarget.src = staticUrl(foe.id);
+                e.currentTarget.src = staticUrl(foe.id, foe.shiny);
               }}
             />
           )}
+          {!trainerSprite && foe.shiny && <Sparks />}
           {throwing && <span className="battle__ball" aria-hidden="true" />}
         </div>
 
@@ -95,12 +112,13 @@ export default function BattleView({ state, message, throwing, trainerSprite }: 
           <img
             key={`mine-${mine.uid}`}
             className={`battle__sprite battle__sprite--back${mine.hp <= 0 ? " battle__sprite--down" : ""}`}
-            src={animatedBackUrl(mine.id) ?? staticBackUrl(mine.id)}
+            src={animatedBackUrl(mine.id, mine.shiny) ?? staticBackUrl(mine.id, mine.shiny)}
             alt={mine.name}
             onError={(e) => {
-              e.currentTarget.src = staticBackUrl(mine.id);
+              e.currentTarget.src = staticBackUrl(mine.id, mine.shiny);
             }}
           />
+          {mine.shiny && <Sparks />}
         </div>
 
         {!trainerSprite && (

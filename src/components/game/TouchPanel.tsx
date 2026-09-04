@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { iconUrl, staticUrl } from "@/lib/pokeapi";
+import { iconUrl, partyIconUrl, staticUrl } from "@/lib/pokeapi";
 import { SPECIES, TYPE_FR, species } from "@/lib/game/data";
 import { maxHp, type Mon } from "@/lib/game/battle";
 import type { GameState } from "@/lib/game/state";
@@ -44,14 +44,21 @@ function MonCard({ mon, current }: { mon: Mon; current: boolean }) {
     <div className={`monc${current ? " monc--current" : ""}${mon.hp <= 0 ? " monc--ko" : ""}`}>
       <img
         className="monc__icon"
-        src={iconUrl(mon.id)}
+        src={partyIconUrl(mon.id, mon.shiny)}
         alt=""
         onError={(e) => {
-          e.currentTarget.src = staticUrl(mon.id);
+          e.currentTarget.src = staticUrl(mon.id, mon.shiny);
         }}
       />
       <div className="monc__info">
-        <span className="monc__name">{mon.name}</span>
+        <span className="monc__name">
+          {mon.name}
+          {mon.shiny && (
+            <span className="shiny-mark" title="Chromatique">
+              ✦
+            </span>
+          )}
+        </span>
         <span className="monc__lvl">N.{mon.level}</span>
         <span className="hpbar hpbar--small">
           <span

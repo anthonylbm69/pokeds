@@ -173,6 +173,7 @@ export function loadGame(): GameState | null {
       starter: data.starter ?? data.party[0]?.id,
       party: data.party.map((mon) => ({
         ...mon,
+        shiny: mon.shiny ?? false,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
     };

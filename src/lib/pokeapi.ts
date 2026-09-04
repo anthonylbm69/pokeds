@@ -61,25 +61,39 @@ export const iconUrl = (id: number) =>
     ? `${SPRITES}/versions/generation-viii/icons/${id}.png`
     : `${SPRITES}/${id}.png`;
 
-/** Sprite animé Noir/Blanc — l'authentique. Disponible jusqu'à Unys (649). */
-export const animatedUrl = (id: number) =>
+
+/**
+ * Sprite animé Noir/Blanc — l'authentique. Disponible jusqu'à Unys (649).
+ * Le dépôt range les chromatiques dans un sous-dossier `shiny`.
+ */
+export const animatedUrl = (id: number, shiny = false) =>
   id <= 649
-    ? `${SPRITES}/versions/generation-v/black-white/animated/${id}.gif`
+    ? `${SPRITES}/versions/generation-v/black-white/animated/${shiny ? "shiny/" : ""}${id}.gif`
     : null;
 
 /** Sprite animé de dos, celui du Pokémon du joueur pendant un combat. */
-export const animatedBackUrl = (id: number) =>
+export const animatedBackUrl = (id: number, shiny = false) =>
   id <= 649
-    ? `${SPRITES}/versions/generation-v/black-white/animated/back/${id}.gif`
+    ? `${SPRITES}/versions/generation-v/black-white/animated/back/${shiny ? "shiny/" : ""}${id}.gif`
     : null;
 
 /** Cri d'un Pokémon, servi tel quel par le dépôt PokéAPI (aucune requête API). */
 export const cryUrl = (id: number) =>
   `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${id}.ogg`;
 
-export const staticUrl = (id: number) => `${SPRITES}/${id}.png`;
+export const staticUrl = (id: number, shiny = false) =>
+  `${SPRITES}/${shiny ? "shiny/" : ""}${id}.png`;
 
-export const staticBackUrl = (id: number) => `${SPRITES}/back/${id}.png`;
+export const staticBackUrl = (id: number, shiny = false) =>
+  `${SPRITES}/back/${shiny ? "shiny/" : ""}${id}.png`;
+
+/**
+ * Vignette d'équipe. Le jeu d'icônes n'existe qu'en livrée normale : pour un
+ * chromatique on passe directement au sprite classique, plutôt que d'aller
+ * chercher une icône qui n'existe pas.
+ */
+export const partyIconUrl = (id: number, shiny = false) =>
+  shiny ? staticUrl(id, true) : iconUrl(id);
 
 export const artworkUrl = (id: number) =>
   `${SPRITES}/other/official-artwork/${id}.png`;

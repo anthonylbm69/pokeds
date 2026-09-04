@@ -2013,6 +2013,65 @@ body::before {
   color: #18222e;
 }
 
+/* ==================================================== les chromatiques */
+
+.shiny-mark {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #f0b429;
+  text-shadow: 0 0 6px rgba(240, 180, 41, 0.8);
+  animation: eclat 1.6s ease-in-out infinite;
+}
+
+@keyframes eclat {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Six étoiles jaillissent une fois, à l'entrée en piste. */
+.sparks {
+  position: absolute;
+  left: 50%;
+  bottom: 40%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.sparks i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px;
+  border-radius: 50%;
+  background: #fff6d5;
+  box-shadow: 0 0 10px 3px rgba(250, 220, 120, 0.95);
+  animation: jaillit 0.9s ease-out both;
+}
+
+.sparks i:nth-child(1) { --dx: -58px; --dy: -46px; animation-delay: 0.05s; }
+.sparks i:nth-child(2) { --dx: 54px; --dy: -52px; animation-delay: 0.12s; }
+.sparks i:nth-child(3) { --dx: -70px; --dy: 14px; animation-delay: 0.19s; }
+.sparks i:nth-child(4) { --dx: 66px; --dy: 20px; animation-delay: 0.26s; }
+.sparks i:nth-child(5) { --dx: -18px; --dy: -74px; animation-delay: 0.33s; }
+.sparks i:nth-child(6) { --dx: 22px; --dy: -68px; animation-delay: 0.4s; }
+
+@keyframes jaillit {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5)) scale(1.25);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.5);
+  }
+}
+
 /* ================================================ le trajet en autocar */
 
 .ride {

@@ -147,6 +147,50 @@ describe("déroulement d'un combat", () => {
   });
 });
 
+describe("les chromatiques", () => {
+  it("restent rares sans être introuvables", () => {
+    let brillants = 0;
+    for (let i = 0; i < 20000; i++) {
+      if (createMon(504, 5).shiny) brillants += 1;
+    }
+    // Espérance : 20000 / 512 ≈ 39. Bornes très larges, le tirage est aléatoire.
+    expect(brillants).toBeGreaterThan(10);
+    expect(brillants).toBeLessThan(90);
+  });
+
+  it("se laissent imposer, dans un sens comme dans l'autre", () => {
+    expect(createMon(504, 5, true).shiny).toBe(true);
+    expect(createMon(504, 5, false).shiny).toBe(false);
+  });
+
+  it("gardent leur livrée après une évolution", () => {
+    const mine = createMon(504, 19, true);
+    mine.exp = expForLevel(20) - 1;
+    const foe = createMon(506, 30);
+    foe.moves = [{ id: "groz-yeux", pp: 30, max: 30 }];
+    const { state } = runBattle(mine, foe);
+    expect(state.party[0].id).toBe(505);
+    expect(state.party[0].shiny, "la livrée s'est perdue en évoluant").toBe(true);
+  });
+
+  it("gardent leur livrée une fois capturés", () => {
+    const foe = createMon(504, 3, true);
+    foe.hp = 1;
+    const state = startWild([createMon(495, 5, false)], foe, bag);
+    const after = throwBall(state).state;
+    if (after.outcome === "capture") {
+      expect(after.caught?.shiny).toBe(true);
+    }
+  });
+
+  it("ne changent rien aux statistiques", () => {
+    const normal = createMon(504, 20, false);
+    const brillant = { ...createMon(504, 20, true), ivs: normal.ivs };
+    expect(maxHp(brillant)).toBe(maxHp(normal));
+    expect(statOf(brillant, "atk")).toBe(statOf(normal, "atk"));
+  });
+});
+
 describe("évolutions", () => {
   it("chaque espèce évolutive pointe vers une espèce connue", () => {
     for (const form of Object.values(SPECIES)) {
