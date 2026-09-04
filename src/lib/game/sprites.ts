@@ -472,6 +472,40 @@ export function drawMon(
   );
 }
 
+/**
+ * Un Pokémon qui ne marche pas mais flotte : il monte et redescend tout seul,
+ * et son ombre se resserre quand il prend de la hauteur.
+ */
+export function drawFloatingMon(
+  ctx: CanvasRenderingContext2D,
+  url: string,
+  fallback: string,
+  x: number,
+  y: number,
+  elapsed: number,
+): void {
+  const sheet = monSheet(url, fallback);
+  if (!sheet) return;
+
+  // Trois pixels d'amplitude, arrondis à la maille : il flotte, il ne glisse pas.
+  const hauteur = (2 + Math.round(Math.sin(elapsed / 420) * 2)) * PX;
+
+  const largeur = TILE * (0.5 - hauteur / (TILE * 6));
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = "#101418";
+  ctx.beginPath();
+  ctx.ellipse(x + TILE / 2, y + TILE - 4, largeur, largeur / 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.drawImage(
+    sheet,
+    Math.round(x + (TILE - MON_SIZE) / 2),
+    Math.round(y + TILE - MON_SIZE) - hauteur,
+  );
+}
+
 /* --------------------------------------------------------------- décors */
 
 /**
@@ -727,6 +761,24 @@ const PAINTERS: Record<TileKind, Painter> = {
     px(ctx, "#c94f4f", 7, 7, 2, 1);
     px(ctx, "#6f747d", 4, 12, 8, 2);
     px(ctx, v % 2 ? "#7fe08a" : "#3f7a48", 12, 4, 1, 1);
+  },
+
+  // La paroi d'une cavité : du granit sombre, veiné et irrégulier.
+  roche: (ctx, v) => {
+    fill(ctx, "#3b3a42");
+    px(ctx, "#4a4954", 0, 0, 16, 9);
+    px(ctx, "#2c2b33", 0, 13, 16, 3);
+    px(ctx, "#565565", speck(v, 1), speck(v, 3), 3, 2);
+    px(ctx, "#2f2e37", speck(v, 5), speck(v, 2), 2, 3);
+    px(ctx, "#605f70", 1, 1, 2, 1);
+  },
+
+  // Son sol : de la pierre battue, avec quelques cailloux épars.
+  caillou: (ctx, v) => {
+    fill(ctx, "#575463");
+    px(ctx, "#615e6e", 0, 0, 16, 8);
+    px(ctx, "#4c4958", speck(v, 2), speck(v, 6), 2, 2);
+    px(ctx, "#6b687a", speck(v, 7), speck(v, 4), 2, 1);
   },
 
   furniture: (ctx, v) => {

@@ -440,3 +440,69 @@ describe("les Centres Pokémon", () => {
     }
   });
 });
+
+describe("la grotte secrète", () => {
+  const grotte = MAPS.grotte;
+
+  it("se cache derrière la porte d'une cabane, et non d'une pièce", () => {
+    const porte = MAPS.route8.warps.find((w) => w.to === "grotte");
+    expect(porte, "aucune porte n'y mène depuis la Route 8").toBeDefined();
+    // On ressort par où l'on est entré.
+    const retour = grotte.warps.filter((w) => w.to === "route8");
+    expect(retour.length).toBeGreaterThan(0);
+    for (const w of retour) {
+      expect(w.tx).toBe(porte!.x);
+      expect(w.ty).toBe(porte!.y + 1);
+    }
+  });
+
+  it("garde son occupant, un Mew de niveau 55 qui flotte", () => {
+    const mew = grotte.npcs.find((n) => n.id === "mew");
+    expect(mew?.mon).toBeDefined();
+    expect(mew!.mon!.id).toBe(151);
+    expect(mew!.mon!.level).toBe(55);
+    expect(mew!.mon!.floats).toBe(true);
+    expect(mew!.lines.length).toBeGreaterThan(0);
+    // Ce n'est pas un dresseur : on doit pouvoir l'attraper.
+    expect(mew!.trainer).toBeUndefined();
+  });
+
+  it("laisse l'atteindre : une case libre devant lui", () => {
+    const mew = grotte.npcs.find((n) => n.id === "mew")!;
+    const abords = [
+      [mew.x, mew.y + 1], [mew.x, mew.y - 1],
+      [mew.x - 1, mew.y], [mew.x + 1, mew.y],
+    ].filter(([x, y]) => walkable(grotte, x, y, grotte.npcs));
+    expect(abords.length, "Mew est inaccessible").toBeGreaterThan(0);
+  });
+
+  it("n'a ni hautes herbes ni rencontres : Mew est la seule affaire", () => {
+    expect(grotte.encounters).toBeUndefined();
+    expect(grotte.tiles.some((row) => row.includes(","))).toBe(false);
+  });
+
+  it("est taillée dans la roche, close de toutes parts", () => {
+    for (const row of grotte.tiles) {
+      expect(row[0]).toBe("R");
+      expect(row[row.length - 1]).toBe("R");
+    }
+    expect(grotte.tiles[0]).toMatch(/^R+$/);
+  });
+});
+
+describe("les Pokémon postés sur une carte", () => {
+  it("n'ont pas de sprite de personnage, et réciproquement", () => {
+    for (const [id, map] of Object.entries(MAPS) as [MapId, MapSpec][]) {
+      for (const npc of map.npcs) {
+        const marque = `${id} : ${npc.id}`;
+        if (npc.mon) {
+          expect(npc.sprite, `${marque} devrait se dessiner en Pokémon`).toBeUndefined();
+          expect(npc.mon.level, marque).toBeGreaterThan(0);
+          expect(DEX[npc.mon.id], `${marque} : espèce inconnue`).toBeDefined();
+        } else {
+          expect(npc.sprite, `${marque} n'a aucun sprite`).toBeDefined();
+        }
+      }
+    }
+  });
+});

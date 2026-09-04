@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyBag, type Bag } from "./items";
 import {
   MOVES,
   computeStat,
@@ -18,13 +19,13 @@ import {
   startWild,
   statOf,
   switchTo,
-  takePotion,
+  takeItem,
   throwBall,
   tryRun,
   type Mon,
 } from "./battle";
 
-const bag = { balls: 10, potions: 5 };
+const bag: Bag = { ...emptyBag(), ball: 10, potion: 5, superball: 2, rappel: 1 };
 
 /** Combat mené jusqu'au bout en tapant toujours la même attaque. */
 function runBattle(mine: Mon, foe: Mon, moveIndex = 0) {
@@ -257,7 +258,7 @@ describe("capture", () => {
 
   it("consomme une Ball et refuse le vol chez un Dresseur", () => {
     const wild = startWild([createMon(495, 5)], createMon(504, 3), bag);
-    expect(throwBall(wild).state.balls).toBe(bag.balls - 1);
+    expect(throwBall(wild).state.bag.ball).toBe(bag.ball - 1);
 
     const duel = startTrainer(
       [createMon(495, 5)],
@@ -266,7 +267,7 @@ describe("capture", () => {
       bag,
     );
     const tried = throwBall(duel);
-    expect(tried.state.balls).toBe(bag.balls);
+    expect(tried.state.bag.ball).toBe(bag.ball);
     expect(tried.messages.join(" ")).toContain("On ne vole pas");
   });
 });
@@ -276,8 +277,8 @@ describe("sac et changement", () => {
     const mine = createMon(495, 5);
     mine.hp = 1;
     const state = startWild([mine], createMon(504, 3), bag);
-    const after = takePotion(state).state;
-    expect(after.potions).toBe(bag.potions - 1);
+    const after = takeItem(state, "potion").state;
+    expect(after.bag.potion).toBe(bag.potion - 1);
     expect(after.party[0].hp).toBeGreaterThan(1);
     expect(after.party[0].hp).toBeLessThanOrEqual(maxHp(after.party[0]));
   });

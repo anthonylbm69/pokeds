@@ -2,7 +2,15 @@
 
 import { useEffect, useRef } from "react";
 import { pixelBackUrl, pixelUrl } from "@/lib/pokeapi";
-import { TILE, drawBike, drawCharacter, drawMon, drawTile, variantFor } from "@/lib/game/sprites";
+import {
+  TILE,
+  drawBike,
+  drawCharacter,
+  drawFloatingMon,
+  drawMon,
+  drawTile,
+  variantFor,
+} from "@/lib/game/sprites";
 import {
   MAPS,
   STEP,
@@ -199,8 +207,18 @@ export default function WorldView({
       for (const npc of latest.current.npcs) {
         actors.push({
           y: npc.y,
-          paint: () =>
-            drawCharacter(ctx, npc.sprite, npc.dir, 0, npc.x * TILE - camX, npc.y * TILE - camY),
+          paint: () => {
+            const nx = npc.x * TILE - camX;
+            const ny = npc.y * TILE - camY;
+            // Un Pokémon posté sur la carte se dessine comme le suiveur.
+            if (npc.mon) {
+              const face = pixelUrl(npc.mon.id, npc.mon.shiny);
+              if (npc.mon.floats) drawFloatingMon(ctx, face, face, nx, ny, elapsed);
+              else drawMon(ctx, face, face, nx, ny, 0);
+              return;
+            }
+            drawCharacter(ctx, npc.sprite ?? "villageois", npc.dir, 0, nx, ny);
+          },
         });
       }
       const mon = latest.current.follower;

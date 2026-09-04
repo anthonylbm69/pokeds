@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MOVES, SPECIES, species } from "./data";
 import { createMon, maxHp } from "./battle";
+import { emptyBag } from "./items";
 import {
   DREAM_LEVEL,
   STARTERS,
@@ -10,7 +11,7 @@ import {
   newGame,
   PARTY_MAX,
   addCaught,
-  applyPotion,
+  applyItem,
   depositMon,
   leadMon,
   withdrawMon,
@@ -169,15 +170,19 @@ describe("le PC des Centres", () => {
 
 describe("le sac hors combat", () => {
   const blesse = () => {
-    const state = { ...newGame("Test"), party: [createMon(495, 20, false)], potions: 2 };
+    const state = {
+      ...newGame("Test"),
+      party: [createMon(495, 20, false)],
+      bag: { ...emptyBag(), potion: 2, rappel: 1 },
+    };
     state.party[0].hp = 1;
     return state;
   };
 
   it("rend des PV et consomme une Potion", () => {
     const avant = blesse();
-    const { state, message } = applyPotion(avant, 0);
-    expect(state.potions).toBe(1);
+    const { state, message } = applyItem(avant, "potion", 0);
+    expect(state.bag.potion).toBe(1);
     expect(state.party[0].hp).toBe(21);
     expect(message).toContain("récupère");
   });
@@ -185,29 +190,29 @@ describe("le sac hors combat", () => {
   it("ne dépasse jamais les PV maximum", () => {
     const avant = blesse();
     avant.party[0].hp = maxHp(avant.party[0]) - 3;
-    const { state } = applyPotion(avant, 0);
+    const { state } = applyItem(avant, "potion", 0);
     expect(state.party[0].hp).toBe(maxHp(state.party[0]));
   });
 
   it("refuse sans Potion, sur un Pokémon intact, ou sur un rang absent", () => {
-    const vide = { ...blesse(), potions: 0 };
-    expect(applyPotion(vide, 0).state).toBe(vide);
-    expect(applyPotion(vide, 0).message).toContain("plus de Potion");
+    const vide = { ...blesse(), bag: emptyBag() };
+    expect(applyItem(vide, "potion", 0).state).toBe(vide);
+    expect(applyItem(vide, "potion", 0).message).toContain("plus de Potion");
 
     const intact = blesse();
     intact.party[0].hp = maxHp(intact.party[0]);
-    expect(applyPotion(intact, 0).state).toBe(intact);
-    expect(applyPotion(intact, 0).message).toContain("tous ses PV");
+    expect(applyItem(intact, "potion", 0).state).toBe(intact);
+    expect(applyItem(intact, "potion", 0).message).toContain("tous ses PV");
 
     const absent = blesse();
-    expect(applyPotion(absent, 4).state).toBe(absent);
+    expect(applyItem(absent, "potion", 4).state).toBe(absent);
   });
 
   it("ne touche pas aux autres Pokémon de l'équipe", () => {
     const avant = { ...blesse(), party: [createMon(495, 20, false), createMon(498, 20, false)] };
     avant.party[0].hp = 1;
     avant.party[1].hp = 5;
-    const { state } = applyPotion(avant, 0);
+    const { state } = applyItem(avant, "potion", 0);
     expect(state.party[1].hp).toBe(5);
   });
 });

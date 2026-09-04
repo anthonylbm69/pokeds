@@ -16,12 +16,13 @@ export type MapId =
   | "route4" | "aigueperse" | "centre3" | "arene2" | "maison3"
   | "route5" | "route6" | "mions" | "centre4" | "arene3" | "maison4"
   | "route7" | "route8" | "ligue" | "centre5"
-  | "ligue1" | "ligue2" | "ligue3" | "ligue4" | "ligue5";
+  | "ligue1" | "ligue2" | "ligue3" | "ligue4" | "ligue5"
+  | "grotte";
 
 export type TileKind =
   | "grass" | "tall" | "path" | "flower" | "tree" | "water"
   | "wall" | "inwall" | "roof" | "door" | "floor" | "counter" | "furniture" | "sign"
-  | "arena" | "stands" | "bus" | "pc";
+  | "arena" | "stands" | "bus" | "pc" | "roche" | "caillou";
 
 type Tile = { kind: TileKind; solid: boolean; encounter?: boolean };
 
@@ -44,6 +45,8 @@ export const TILES: Record<string, Tile> = {
   E: { kind: "stands", solid: true },
   U: { kind: "bus", solid: true },
   P: { kind: "pc", solid: true },
+  R: { kind: "roche", solid: true },
+  G: { kind: "caillou", solid: false },
 };
 
 export type NpcSprite =
@@ -71,7 +74,13 @@ export type NpcSpec = {
   x: number;
   y: number;
   dir: Dir;
-  sprite: NpcSprite;
+  /** Absent quand le personnage est un Pokémon : c'est `mon` qui le dessine. */
+  sprite?: NpcSprite;
+  /**
+   * Un Pokémon posté sur la carte. Lui parler ouvre un combat sauvage ; une
+   * fois vaincu ou capturé, il ne revient pas.
+   */
+  mon?: { id: number; level: number; shiny?: boolean; floats?: boolean };
   lines: string[];
   trainer?: TrainerSpec;
   /** Soigne l'équipe après la réplique. */
@@ -1614,8 +1623,8 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##..,,,,,==,,,,,..##",
       "##..,,,,,==,,,,,..##",
       "##.......==.......##",
-      "##..###..==..###..##",
-      "##..###..==..###..##",
+      "##..TTT..==..###..##",
+      "##..WDW..==..###..##",
       "##.......==.......##",
       "##,,,,...==...,,,,##",
       "##,,,,...==...,,,,##",
@@ -1662,6 +1671,8 @@ export const MAPS: Record<MapId, MapSpec> = {
       { x: 10, y: 21, to: "route7", tx: 10, ty: 1, dir: "down" },
       { x: 9, y: 0, to: "ligue", tx: 9, ty: 14, dir: "up" },
       { x: 10, y: 0, to: "ligue", tx: 10, ty: 14, dir: "up" },
+      // La cabane du col : sa porte ne donne pas sur une pièce.
+      { x: 5, y: 15, to: "grotte", tx: 7, ty: 12, dir: "up" },
     ],
     signs: [
       { x: 4, y: 20, text: ["ROUTE 8 — LA MONTÉE", "Plus qu'un effort avant le Plateau."] },
@@ -2155,6 +2166,60 @@ export const MAPS: Record<MapId, MapSpec> = {
     ],
     signs: [],
   },
+
+  /**
+   * L'arrière de la cabane du col n'est pas une pièce : la paroi s'ouvre sur
+   * une cavité que personne n'a cartographiée. Mew y flotte, et n'attend que
+   * les Dresseurs assez curieux pour pousser cette porte.
+   */
+  grotte: {
+    name: "Grotte Secrète",
+    indoor: true,
+    tiles: [
+      "RRRRRRRRRRRRRRR",
+      "RRGGGGGGGGGGGRR",
+      "RGGGGGGGGGGGGGR",
+      "RGGRRGGGGGRRGGR",
+      "RGGRRGGGGGRRGGR",
+      "RGGGGGGGGGGGGGR",
+      "RGGGGGGGGGGGGGR",
+      "RGGGGGGGGGGGGGR",
+      "RGGRRGGGGGRRGGR",
+      "RGGRRGGGGGRRGGR",
+      "RGGGGGGGGGGGGGR",
+      "RGGGGGGGGGGGGGR",
+      "RRGGGGGGGGGGGRR",
+      "RRRRRRRDDRRRRRR",
+    ],
+    npcs: [
+      {
+        id: "mew",
+        x: 7,
+        y: 4,
+        dir: "down",
+        mon: { id: 151, level: 55, floats: true },
+        lines: [
+          "Une lueur rose flotte au milieu de la caverne.",
+          "Elle vous observe sans crainte, la queue ondulant dans le vide.",
+          "Mew !",
+        ],
+      },
+    ],
+    warps: [
+      { x: 7, y: 13, to: "route8", tx: 5, ty: 16, dir: "down" },
+      { x: 8, y: 13, to: "route8", tx: 5, ty: 16, dir: "down" },
+    ],
+    signs: [
+      {
+        x: 3,
+        y: 3,
+        text: [
+          "Une inscription usée court sur la paroi.",
+          "« Ici dort celui qui a donné naissance à tous les autres. »",
+        ],
+      },
+    ],
+  },
 };
 
 /* ------------------------------------------------- la carte de la région */
@@ -2188,7 +2253,17 @@ export const REGION: RegionNode[] = [
   { map: "route6", label: "Route 6", short: "R6", kind: "route", biome: "montagne", x: 62, y: 38 },
   { map: "mions", label: "Mions", short: "Mions", kind: "ville", biome: "montagne", x: 74, y: 31, inside: ["centre4", "arene3", "maison4"] },
   { map: "route7", label: "Route 7", short: "R7", kind: "route", biome: "neige", x: 86, y: 23 },
-  { map: "route8", label: "Route 8", short: "R8", kind: "route", biome: "montagne", x: 74, y: 14 },
+  {
+    map: "route8",
+    label: "Route 8",
+    short: "R8",
+    kind: "route",
+    biome: "montagne",
+    x: 74,
+    y: 14,
+    // La cabane du col ne figure sur aucune carte : elle tient au lieu.
+    inside: ["grotte"],
+  },
   {
     map: "ligue",
     label: "Plateau de la Ligue",

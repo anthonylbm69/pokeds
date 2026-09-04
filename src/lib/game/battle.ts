@@ -17,6 +17,7 @@ import {
   type StatKey,
   type TypeName,
 } from "./data";
+import { ITEMS, countOf, effectOn, spend, type Bag, type ItemId } from "./items";
 
 export type Mon = {
   uid: string;
@@ -123,8 +124,7 @@ export type BattleState = {
   playerStages: Stages;
   foeStages: Stages;
   trainer?: { name: string; title: string; reward: number };
-  balls: number;
-  potions: number;
+  bag: Bag;
   turn: number;
   outcome: "en-cours" | "victoire" | "defaite" | "capture" | "fuite";
   /** Pokémon capturé, à ajouter à l'équipe une fois les messages lus. */
@@ -138,7 +138,7 @@ export type Turn = { state: BattleState; messages: string[] };
 
 export const activeMon = (s: BattleState) => s.party[s.active];
 
-export function startWild(party: Mon[], foe: Mon, bag: { balls: number; potions: number }): BattleState {
+export function startWild(party: Mon[], foe: Mon, bag: Bag): BattleState {
   return {
     kind: "sauvage",
     party,
@@ -147,8 +147,7 @@ export function startWild(party: Mon[], foe: Mon, bag: { balls: number; potions:
     foeTeam: [],
     playerStages: noStages(),
     foeStages: noStages(),
-    balls: bag.balls,
-    potions: bag.potions,
+    bag,
     turn: 0,
     outcome: "en-cours",
     mustSwitch: false,
@@ -160,7 +159,7 @@ export function startTrainer(
   party: Mon[],
   team: Mon[],
   trainer: { name: string; title: string; reward: number },
-  bag: { balls: number; potions: number },
+  bag: Bag,
 ): BattleState {
   return {
     kind: "dresseur",
@@ -171,8 +170,7 @@ export function startTrainer(
     playerStages: noStages(),
     foeStages: noStages(),
     trainer,
-    balls: bag.balls,
-    potions: bag.potions,
+    bag,
     turn: 0,
     outcome: "en-cours",
     mustSwitch: false,
@@ -481,23 +479,26 @@ function catchShakes(target: Mon, ballBonus: number): number {
   return shakes;
 }
 
-export function throwBall(prev: BattleState): Turn {
+export function throwBall(prev: BattleState, item: ItemId = "ball"): Turn {
   const state = clone(prev);
   const messages: string[] = [];
+  const data = ITEMS[item];
 
   if (state.kind === "dresseur") {
     messages.push("On ne vole pas les Pokémon des autres !");
     return { state, messages };
   }
-  if (state.balls <= 0) {
-    messages.push("Vous n'avez plus de Poké Ball !");
+  if (countOf(state.bag, item) <= 0) {
+    messages.push(`Vous n'avez plus de ${data.name} !`);
     return { state, messages };
   }
 
-  state.balls -= 1;
-  messages.push("Vous lancez une Poké Ball !");
+  state.bag = spend(state.bag, item);
+  messages.push(`Vous lancez une ${data.name} !`);
 
-  const shakes = catchShakes(state.foe, 1);
+  // Une Ball plus fine multiplie le taux de capture : c'est tout ce qui
+  // sépare une Poké Ball d'une Hyper Ball.
+  const shakes = catchShakes(state.foe, data.bonus ?? 1);
   if (shakes >= 4) {
     messages.push(`Et hop ! ${state.foe.name} est capturé !`);
     state.outcome = "capture";
@@ -549,27 +550,41 @@ export function tryRun(prev: BattleState): Turn {
   return { state, messages };
 }
 
-/** Ce qu'une Potion rend, en combat comme au sac. */
-export const POTION_HEAL = 20;
-
-export function takePotion(prev: BattleState): Turn {
+/**
+ * Un soin ou un Rappel, posé sur un Pokémon de l'équipe. Employer un objet
+ * coûte le tour : l'adversaire riposte, sauf si l'objet était sans effet.
+ */
+export function takeItem(prev: BattleState, item: ItemId, target?: number): Turn {
   const state = clone(prev);
   const messages: string[] = [];
-  const mon = activeMon(state);
+  const index = target ?? state.active;
+  const mon = state.party[index];
+  const data = ITEMS[item];
 
-  if (state.potions <= 0) {
-    messages.push("Vous n'avez plus de Potion !");
+  if (countOf(state.bag, item) <= 0) {
+    messages.push(`Vous n'avez plus de ${data.name} !`);
     return { state, messages };
   }
-  if (mon.hp >= maxHp(mon)) {
-    messages.push(`${mon.name} a déjà tous ses PV !`);
+  const { healed, refus } = effectOn(item, mon);
+  if (refus) {
+    messages.push(refus);
     return { state, messages };
   }
 
-  state.potions -= 1;
-  const healed = Math.min(POTION_HEAL, maxHp(mon) - mon.hp);
+  state.bag = spend(state.bag, item);
+  const releve = mon.hp <= 0;
   mon.hp += healed;
-  messages.push(`${mon.name} récupère ${healed} PV !`);
+  messages.push(
+    releve
+      ? `${mon.name} reprend ses esprits et récupère ${healed} PV !`
+      : `${mon.name} récupère ${healed} PV !`,
+  );
+
+  // Ranimer le Pokémon au tapis lève l'obligation de changer.
+  if (releve && state.mustSwitch && state.party.some((m) => !isKo(m))) {
+    state.mustSwitch = false;
+    if (isKo(activeMon(state))) state.active = index;
+  }
 
   const theirIndex = foeChoice(state);
   if (theirIndex >= 0) applyMove(state, false, theirIndex, messages);

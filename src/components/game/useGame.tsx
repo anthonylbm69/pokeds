@@ -5,16 +5,23 @@ import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import { MOVES, TYPE_FR, species } from "@/lib/game/data";
 import {
+  ITEMS,
+  ITEM_ORDER,
+  countOf,
+  effectOn,
+  needsTarget,
+  type ItemId,
+} from "@/lib/game/items";
+import {
   activeMon,
   createMon,
-  POTION_HEAL,
   isKo,
   maxHp,
   playerMove,
   startTrainer,
   startWild,
   switchTo,
-  takePotion,
+  takeItem,
   throwBall,
   tryRun,
   type BattleState,
@@ -49,7 +56,7 @@ import {
   newGame,
   leadMon,
   saveGame,
-  applyPotion,
+  applyItem,
   withDreamTeam,
   withdrawMon,
   withFlag,
@@ -77,17 +84,21 @@ type Then =
   | { do: "starter" }
   | { do: "heal"; respawn: boolean }
   | { do: "trainer"; npc: string }
+  | { do: "statique"; npc: string }
   | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
 
 type BattleUi = {
   state: BattleState;
   queue: string[];
-  view: "message" | "menu" | "moves" | "bag" | "party";
+  view: "message" | "menu" | "moves" | "bag" | "bagCible" | "party";
+  /** Objet choisi au sac, en attente de sa cible. */
+  item?: ItemId;
   throwing: boolean;
   /** Le dresseur est encore en scène, avant son premier Pokémon. */
   showTrainer: boolean;
-  origin: { kind: "sauvage" } | { kind: "dresseur"; npc: string };
+  /** `npc` n'est renseigné que pour un Pokémon posté sur la carte. */
+  origin: { kind: "sauvage"; npc?: string } | { kind: "dresseur"; npc: string };
 };
 
 type Counter = "boutique" | "velo";
@@ -102,16 +113,13 @@ type Phase =
   | { kind: "bus" }
   | { kind: "voyage"; to: MapId; label: string }
   | { kind: "shop"; counter: Counter; message: string | null }
-  | { kind: "sac"; on: "objets" | "cible"; message: string | null }
+  | { kind: "sac"; on: "objets" | "cible"; item?: ItemId; message: string | null }
   | { kind: "pc"; on: "menu" | "retirer" | "deposer" | "ordre"; message: string | null }
   | { kind: "battle"; ui: BattleUi };
 
 /** Les rayons, aux prix d'Unys. */
 const STOCK: Record<Counter, { id: string; label: string; price: number }[]> = {
-  boutique: [
-    { id: "ball", label: "POKÉ BALL", price: 200 },
-    { id: "potion", label: "POTION", price: 300 },
-  ],
+  boutique: ITEM_ORDER.map((id) => ({ id, label: ITEMS[id].name, price: ITEMS[id].price })),
   velo: [{ id: "bike", label: "VÉLO", price: BIKE_PRICE }],
 };
 
@@ -125,6 +133,14 @@ const INTRO = [
 ];
 
 const ENCOUNTER_RATE = 0.14;
+
+/** La note qui suit le décompte d'un objet : ce qu'il fait, en trois mots. */
+function itemHint(id: ItemId): string {
+  const data = ITEMS[id];
+  if (data.kind === "rappel") return " — ranime un K.O.";
+  if (data.kind === "soin") return ` — rend ${data.heal} PV`;
+  return data.bonus && data.bonus > 1 ? ` — capture ×${data.bonus}` : "";
+}
 
 /** Durée du trajet en autocar, animation comprise. */
 const RIDE_MS = 2800;
@@ -198,7 +214,11 @@ export function useGame({
 
   const map = MAPS[game.map];
 
-  const npcs = useMemo<NpcSpec[]>(() => map.npcs, [map]);
+  const npcs = useMemo<NpcSpec[]>(
+    // Le légendaire de la grotte quitte les lieux une fois l'affaire réglée.
+    () => map.npcs.filter((n) => !n.mon || !hasFlag(game, `battu:${n.id}`)),
+    [map, game],
+  );
 
   /**
    * Le Pokémon qui marche derrière le joueur : le premier de l'équipe encore
@@ -217,6 +237,15 @@ export function useGame({
 
   const talk = useCallback(
     (npc: NpcSpec) => {
+      if (npc.mon) {
+        setPhase({
+          kind: "text",
+          lines: npc.lines,
+          i: 0,
+          then: { do: "statique", npc: npc.id },
+        });
+        return;
+      }
       if (npc.trainer && !hasFlag(game, `battu:${npc.id}`)) {
         setPhase({
           kind: "text",
@@ -310,7 +339,7 @@ export function useGame({
   const startWildBattle = useCallback(
     (id: number, level: number) => {
       const foe = createMon(id, level);
-      const state = startWild(game.party, foe, { balls: game.balls, potions: game.potions });
+      const state = startWild(game.party, foe, game.bag);
       openBattle(
         state,
         [
@@ -322,6 +351,30 @@ export function useGame({
       );
     },
     [game, openBattle],
+  );
+
+  /**
+   * Le combat d'un Pokémon posté sur une carte — un légendaire au fond d'une
+   * grotte. C'est un combat sauvage : on peut le capturer, mais il ne se
+   * représentera pas si on le met au tapis.
+   */
+  const startStaticBattle = useCallback(
+    (npcId: string) => {
+      const npc = npcById(npcId);
+      if (!npc?.mon) return;
+      const foe = createMon(npc.mon.id, npc.mon.level, npc.mon.shiny);
+      const state = startWild(game.party, foe, game.bag);
+      openBattle(
+        state,
+        [
+          `${foe.name} bloque le passage !`,
+          ...(foe.shiny ? ["✦ Sa livrée scintille d'un éclat rare !"] : []),
+          `En avant, ${activeMon(state).name} !`,
+        ],
+        { kind: "sauvage", npc: npcId },
+      );
+    },
+    [game, npcById, openBattle],
   );
 
   const startTrainerBattle = useCallback(
@@ -338,7 +391,7 @@ export function useGame({
         name: npc.trainer.name,
         title: npc.trainer.title,
         reward: npc.trainer.reward,
-      }, { balls: game.balls, potions: game.potions });
+      }, game.bag);
       openBattle(
         state,
         [
@@ -359,8 +412,7 @@ export function useGame({
       let next: GameState = {
         ...game,
         party: s.party,
-        balls: s.balls,
-        potions: s.potions,
+        bag: s.bag,
       };
       const lines: string[] = [];
 
@@ -375,6 +427,15 @@ export function useGame({
       }
 
       if (s.outcome === "victoire") music.play("victoire");
+
+      // Un Pokémon posté cède la place dès qu'il est vaincu ou capturé.
+      if (
+        ui.origin.kind === "sauvage" &&
+        ui.origin.npc &&
+        (s.outcome === "victoire" || s.outcome === "capture")
+      ) {
+        next = withFlag(next, `battu:${ui.origin.npc}`);
+      }
 
       if (s.outcome === "victoire" && ui.origin.kind === "dresseur") {
         const npc = npcById(ui.origin.npc);
@@ -623,6 +684,9 @@ export function useGame({
           setCursor(0);
           setPhase({ kind: "starter" });
           break;
+        case "statique":
+          startStaticBattle(then.npc);
+          break;
         case "trainer":
           startTrainerBattle(then.npc);
           break;
@@ -650,7 +714,7 @@ export function useGame({
           setPhase({ kind: "world" });
       }
     },
-    [game, startTrainerBattle],
+    [game, startTrainerBattle, startStaticBattle],
   );
 
   /** Achat d'un article : le comptoir reste ouvert pour enchaîner. */
@@ -670,8 +734,10 @@ export function useGame({
       const next: GameState = {
         ...game,
         money: game.money - item.price,
-        balls: game.balls + (item.id === "ball" ? 1 : 0),
-        potions: game.potions + (item.id === "potion" ? 1 : 0),
+        bag:
+          item.id === "bike"
+            ? game.bag
+            : { ...game.bag, [item.id as ItemId]: countOf(game.bag, item.id as ItemId) + 1 },
         bike: game.bike || item.id === "bike",
       };
       setGame(next);
@@ -682,7 +748,7 @@ export function useGame({
         message:
           item.id === "bike"
             ? "Et voilà votre vélo ! Appuyez sur L pour monter en selle."
-            : `Et voilà une ${item.label.toLowerCase()} ! Merci de votre visite.`,
+            : `Et voilà un${item.id.endsWith("ball") ? "e" : ""} ${item.label} ! Merci de votre visite.`,
       });
     },
     [game],
@@ -785,6 +851,12 @@ export function useGame({
 
   const battleUi = phase.kind === "battle" ? phase.ui : null;
 
+  /** Ce que le sac contient en tout, pour la vignette du menu. */
+  const sacTotal = useMemo(
+    () => ITEM_ORDER.reduce((n, id) => n + countOf(game.bag, id), 0),
+    [game.bag],
+  );
+
   /** Une ligne de liste pour un Pokémon : nom, livrée, niveau et PV. */
   const monLine = useCallback(
     (mon: Mon) => ({
@@ -812,7 +884,12 @@ export function useGame({
           layout: "grid",
           list: [
             { id: "fight", label: "COMBAT", tone: "fight" },
-            { id: "bag", label: "SAC", tone: "bag", sub: `${s.balls} Ball · ${s.potions} Potion` },
+            {
+              id: "bag",
+              label: "SAC",
+              tone: "bag",
+              sub: `${ITEM_ORDER.reduce((n, id) => n + countOf(s.bag, id), 0)} objets`,
+            },
             { id: "party", label: "POKÉMON", tone: "party" },
             { id: "run", label: "FUITE", tone: "run", disabled: s.kind === "dresseur" },
           ],
@@ -838,12 +915,38 @@ export function useGame({
       if (battleUi.view === "bag") {
         return {
           title: "Sac",
-          hint: "A pour utiliser · B pour revenir",
+          hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
           layout: "list",
           list: [
-            { id: "ball", label: "POKÉ BALL", sub: `× ${s.balls}`, disabled: s.balls <= 0 || s.kind === "dresseur", tone: "bag" },
-            { id: "potion", label: "POTION", sub: `× ${s.potions}`, disabled: s.potions <= 0, tone: "bag" },
-            { id: "back", label: "RETOUR", tone: "back" },
+            ...ITEM_ORDER.filter((id) => countOf(s.bag, id) > 0).map((id) => ({
+              id,
+              label: ITEMS[id].name,
+              sub:
+                ITEMS[id].kind === "ball" && s.kind === "dresseur"
+                  ? `× ${countOf(s.bag, id)} — pas sur le Pokémon d'un autre`
+                  : `× ${countOf(s.bag, id)}${itemHint(id)}`,
+              disabled: ITEMS[id].kind === "ball" && s.kind === "dresseur",
+              tone: "bag" as const,
+            })),
+            { id: "back", label: "RETOUR", tone: "back" as const },
+          ],
+        };
+      }
+
+      if (battleUi.view === "bagCible") {
+        const item = battleUi.item ?? "potion";
+        return {
+          title: `${ITEMS[item].name} sur qui ?`,
+          hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
+          layout: "list",
+          list: [
+            ...s.party.map((m, i) => ({
+              id: `cible:${i}`,
+              ...monLine(m),
+              disabled: effectOn(item, m).refus !== null,
+              tone: "party" as const,
+            })),
+            { id: "back", label: "RETOUR", tone: "back" as const },
           ],
         };
       }
@@ -920,13 +1023,11 @@ export function useGame({
 
     if (phase.kind === "shop") {
       const owned = (id: string) =>
-        id === "ball"
-          ? `vous en avez ${game.balls}`
-          : id === "potion"
-            ? `vous en avez ${game.potions}`
-            : game.bike
-              ? "déjà en selle"
-              : "un seul suffit";
+        id === "bike"
+          ? game.bike
+            ? "déjà en selle"
+            : "un seul suffit"
+          : `vous en avez ${countOf(game.bag, id as ItemId)}`;
       return {
         title: phase.counter === "velo" ? "Cycles Maillard" : "Boutique",
         hint: "▲ ▼ pour choisir · A pour acheter · B pour sortir",
@@ -947,40 +1048,39 @@ export function useGame({
     if (phase.kind === "sac") {
       const back = { id: "back", label: "RETOUR", tone: "back" as const };
       if (phase.on === "cible") {
+        const item = phase.item ?? "potion";
         return {
-          title: "Sur quel Pokémon ?",
-          hint: "▲ ▼ pour choisir · A pour soigner · B pour revenir",
+          title: `${ITEMS[item].name} sur qui ?`,
+          hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
           layout: "list",
           list: [
             ...game.party.map((mon, i) => ({
               id: `mon:${i}`,
               ...monLine(mon),
-              disabled: mon.hp >= maxHp(mon),
+              disabled: effectOn(item, mon).refus !== null,
               tone: "party" as const,
             })),
             back,
           ],
         };
       }
+      const tenus = ITEM_ORDER.filter((id) => countOf(game.bag, id) > 0);
       return {
         title: "Sac",
         hint: "▲ ▼ pour choisir · A pour utiliser · B pour fermer",
         layout: "list",
         list: [
-          {
-            id: "potion",
-            label: "POTION",
-            sub: `× ${game.potions} — rend ${POTION_HEAL} PV`,
-            disabled: game.potions <= 0 || !game.party.length,
+          ...tenus.map((id) => ({
+            id,
+            label: ITEMS[id].name,
+            sub:
+              ITEMS[id].kind === "ball"
+                ? `× ${countOf(game.bag, id)} — seulement en combat`
+                : `× ${countOf(game.bag, id)}${itemHint(id)}`,
+            disabled: ITEMS[id].kind === "ball" || !game.party.length,
             tone: "bag" as const,
-          },
-          {
-            id: "ball",
-            label: "POKÉ BALL",
-            sub: `× ${game.balls} — seulement en combat`,
-            disabled: true,
-            tone: "bag" as const,
-          },
+          })),
+          ...(tenus.length ? [] : [{ id: "vide", label: "SAC VIDE", disabled: true, tone: "back" as const }]),
           { id: "leave", label: "FERMER", tone: "back" as const },
         ],
       };
@@ -1078,7 +1178,7 @@ export function useGame({
       // Sept entrées : deux colonnes se lisent mieux qu'une rangée serrée.
       layout: "grid",
       list: [
-        { id: "sac", label: "SAC", sub: `${game.balls} Ball · ${game.potions} Potion` },
+        { id: "sac", label: "SAC", sub: `${sacTotal} objet${sacTotal > 1 ? "s" : ""}` },
         { id: "carte", label: "CARTE", sub: "START" },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
@@ -1092,7 +1192,7 @@ export function useGame({
         { id: "title", label: "TITRE", sub: "SELECT" },
       ],
     };
-  }, [battleUi, phase, game, monLine]);
+  }, [battleUi, phase, game, monLine, sacTotal]);
 
   /* ---------------------------------------------------------- entrées */
 
@@ -1143,10 +1243,10 @@ export function useGame({
         }
         if (phase.on === "objets") {
           setCursor(0);
-          setPhase({ kind: "sac", on: "cible", message: null });
+          setPhase({ kind: "sac", on: "cible", item: choice.id as ItemId, message: null });
           return;
         }
-        const soin = applyPotion(game, Number(choice.id.split(":")[1]));
+        const soin = applyItem(game, phase.item ?? "potion", Number(choice.id.split(":")[1]));
         setGame(soin.state);
         setCursor(0);
         setPhase({ kind: "sac", on: "objets", message: soin.message });
@@ -1226,11 +1326,25 @@ export function useGame({
           if (choice.id === "back") {
             setCursor(0);
             setPhase({ kind: "battle", ui: { ...ui, view: "menu" } });
-          } else if (choice.id === "ball") {
-            runTurn(ui, throwBall(ui.state), true);
-          } else if (choice.id === "potion") {
-            runTurn(ui, takePotion(ui.state));
+            return;
           }
+          const item = choice.id as ItemId;
+          // Une Ball part sur l'adversaire ; un soin demande d'abord sa cible.
+          if (needsTarget(item)) {
+            setCursor(0);
+            setPhase({ kind: "battle", ui: { ...ui, view: "bagCible", item } });
+          } else {
+            runTurn(ui, throwBall(ui.state, item), true);
+          }
+          return;
+        }
+        if (ui.view === "bagCible") {
+          if (choice.id === "back") {
+            setCursor(0);
+            setPhase({ kind: "battle", ui: { ...ui, view: "bag" } });
+            return;
+          }
+          runTurn(ui, takeItem(ui.state, ui.item ?? "potion", Number(choice.id.split(":")[1])));
           return;
         }
         if (choice.id === "back") {

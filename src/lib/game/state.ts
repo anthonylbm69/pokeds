@@ -4,7 +4,17 @@
  */
 
 import { MOVES, type MoveId } from "./data";
-import { POTION_HEAL, createMon, healMon, maxHp, type Mon } from "./battle";
+import { createMon, healMon, maxHp, type Mon } from "./battle";
+import {
+  ITEMS,
+  countOf,
+  effectOn,
+  normaliseBag,
+  spend,
+  startingBag,
+  type Bag,
+  type ItemId,
+} from "./items";
 import type { Dir, MapId } from "./world";
 
 export type GameState = {
@@ -17,8 +27,13 @@ export type GameState = {
   party: Mon[];
   /** Le PC des Centres : ce que l'équipe ne peut pas porter. */
   box: Mon[];
-  balls: number;
-  potions: number;
+  bag: Bag;
+  /**
+   * Anciens compteurs, gardés pour relire une sauvegarde d'avant le sac.
+   * Rien ne les écrit plus.
+   */
+  balls?: number;
+  potions?: number;
   money: number;
   /** Vélo acheté chez Cycles Maillard, et selle occupée ou non. */
   bike: boolean;
@@ -107,8 +122,7 @@ export function newGame(name: string): GameState {
     dir: "down",
     party: [],
     box: [],
-    balls: 5,
-    potions: 3,
+    bag: startingBag(),
     money: 3000,
     bike: false,
     riding: false,
@@ -194,28 +208,32 @@ export function leadMon(state: GameState, index: number): GameState {
 }
 
 /**
- * Soigne un Pokémon de l'équipe avec une Potion, hors combat. Le nom évite le
- * préfixe `use`, que la règle des hooks de React prendrait pour un hook.
- * Renvoie l'état inchangé et le motif du refus quand le soin est sans objet.
+ * Pose un objet du sac sur un Pokémon de l'équipe, hors combat. Le nom évite
+ * le préfixe `use`, que la règle des hooks de React prendrait pour un hook.
+ * Renvoie l'état inchangé et le motif du refus quand l'objet est sans effet.
  */
-export function applyPotion(
+export function applyItem(
   state: GameState,
+  item: ItemId,
   index: number,
 ): { state: GameState; message: string } {
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
   const mon = state.party[index];
-  if (!mon) return { state, message: "Aucun Pokémon à soigner." };
-  if (state.potions <= 0) return { state, message: "Vous n'avez plus de Potion !" };
-  const max = maxHp(mon);
-  if (mon.hp >= max) return { state, message: `${mon.name} a déjà tous ses PV !` };
+  const { healed, refus } = effectOn(item, mon);
+  if (refus) return { state, message: refus };
 
-  const healed = Math.min(POTION_HEAL, max - mon.hp);
+  const releve = mon.hp <= 0;
   return {
     state: {
       ...state,
-      potions: state.potions - 1,
+      bag: spend(state.bag, item),
       party: state.party.map((m, i) => (i === index ? { ...m, hp: m.hp + healed } : m)),
     },
-    message: `${mon.name} récupère ${healed} PV !`,
+    message: releve
+      ? `${mon.name} reprend ses esprits et récupère ${healed} PV !`
+      : `${mon.name} récupère ${healed} PV !`,
   };
 }
 
@@ -245,6 +263,10 @@ export function loadGame(): GameState | null {
       bike: data.bike ?? false,
       riding: false,
       music: data.music ?? true,
+      // Une partie d'avant les Super Ball ne connaissait que deux compteurs.
+      bag: normaliseBag(data.bag, data.balls, data.potions),
+      balls: undefined,
+      potions: undefined,
       follower: data.follower ?? true,
       box: (data.box ?? []).map((mon) => ({
         ...mon,
