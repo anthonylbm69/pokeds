@@ -4,6 +4,7 @@
  * pose est rendue une fois dans un canevas hors écran, puis recopiée.
  */
 
+import { hex, poster, reduce } from "./palette";
 import type { Biome, Dir, NpcSprite, TileKind } from "./world";
 
 /** Une case du décor à l'écran (16 px de la DS, doublés). */
@@ -311,37 +312,145 @@ export function drawBike(ctx: CanvasRenderingContext2D, x: number, y: number): v
 /* --------------------------------------------------- le Pokémon qui suit */
 
 /**
- * Tout le reste du décor est peint au pixel dans ce fichier ; le Pokémon de
- * tête, lui, est une image de la PokéAPI. On la charge une fois puis on la
- * garde : `null` signale qu'elle n'est pas encore prête, et on ne dessine
- * rien plutôt qu'un carré vide.
+ * Les sprites de la PokéAPI ne sont pas à la maille du jeu : on les
+ * repixellise à la volée sur la grille des personnages — même pas de deux
+ * pixels d'écran, même liseré sombre, même palette réduite — pour que le
+ * Pokémon qui marche derrière le héros ait l'air peint avec lui.
+ *
+ * Le travail est fait une fois par sprite, au chargement de l'image, et la
+ * planche obtenue est gardée : la boucle de rendu ne fait plus qu'une copie.
  */
-const monSprites = new Map<string, HTMLImageElement | null>();
 
-function monSprite(url: string, fallback?: string): HTMLImageElement | null {
-  const held = monSprites.get(url);
-  if (held !== undefined) return held;
+/** Côté de la grille du suiveur, liseré compris. */
+const MON_GRID = 18;
+/** Le corps : il reste une case tout autour pour le liseré. */
+const MON_BODY = 16;
+const MON_SIZE = MON_GRID * PX;
 
-  monSprites.set(url, null);
+/** Le noir des contours, celui des personnages. */
+const OUTLINE = "#171a20";
+
+/** Le contenu utile de l'image : les sprites ont beaucoup de vide autour. */
+function contentBox(data: ImageData) {
+  let x0 = data.width;
+  let y0 = data.height;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < data.height; y++) {
+    for (let x = 0; x < data.width; x++) {
+      if (data.data[(y * data.width + x) * 4 + 3] < 32) continue;
+      if (x < x0) x0 = x;
+      if (y < y0) y0 = y;
+      if (x > x1) x1 = x;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return null;
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/** Repixellise un sprite chargé sur la grille du jeu. */
+function pixelate(img: HTMLImageElement): HTMLCanvasElement {
+  const sheet = canvas(MON_SIZE, MON_SIZE);
+  const out = sheet.getContext("2d")!;
+
+  const source = canvas(img.naturalWidth, img.naturalHeight);
+  const sctx = source.getContext("2d", { willReadFrequently: true })!;
+  sctx.drawImage(img, 0, 0);
+
+  let box = { x: 0, y: 0, w: source.width, h: source.height };
+  let grille: (string | null)[][] | null = null;
+  try {
+    box = contentBox(sctx.getImageData(0, 0, source.width, source.height)) ?? box;
+
+    // Réduction moyennée : à cette taille, le plus proche voisin ne garderait
+    // que du bruit. Le corps est calé en bas, pour que les pieds portent.
+    const petit = canvas(MON_BODY, MON_BODY);
+    const pctx = petit.getContext("2d", { willReadFrequently: true })!;
+    pctx.imageSmoothingEnabled = true;
+    pctx.imageSmoothingQuality = "high";
+    const echelle = Math.min(MON_BODY / box.w, MON_BODY / box.h);
+    const w = Math.max(1, Math.round(box.w * echelle));
+    const h = Math.max(1, Math.round(box.h * echelle));
+    pctx.drawImage(img, box.x, box.y, box.w, box.h, Math.floor((MON_BODY - w) / 2), MON_BODY - h, w, h);
+
+    const data = pctx.getImageData(0, 0, MON_BODY, MON_BODY).data;
+
+    // Première passe : les couleurs sur leurs paliers, en gardant leur place.
+    const brut = new Map<string, number>();
+    for (let y = 0; y < MON_BODY; y++) {
+      for (let x = 0; x < MON_BODY; x++) {
+        const i = (y * MON_BODY + x) * 4;
+        // Pas de demi-transparence : un pixel est peint ou il ne l'est pas.
+        if (data[i + 3] < 128) continue;
+        brut.set(`${x},${y}`, poster(data[i], data[i + 1], data[i + 2]));
+      }
+    }
+
+    // Seconde passe : la palette du sprite, réduite à une poignée de teintes.
+    const table = reduce([...brut.values()]);
+    grille = Array.from({ length: MON_GRID }, () => new Array<string | null>(MON_GRID).fill(null));
+    for (const [place, couleur] of brut) {
+      const [x, y] = place.split(",").map(Number);
+      grille[y + 1][x + 1] = hex(table.get(couleur) ?? couleur);
+    }
+  } catch {
+    // Lecture des pixels refusée : on se rabat sur une simple réduction, sans
+    // palette ni liseré. Mieux vaut un suiveur approximatif que pas de suiveur.
+    out.imageSmoothingEnabled = false;
+    out.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, MON_SIZE, MON_SIZE);
+    return sheet;
+  }
+
+  // Le liseré sombre des personnages, posé tout autour de la silhouette.
+  const plein = grille.map((row) => row.map((c) => c !== null));
+  for (let y = 0; y < MON_GRID; y++) {
+    for (let x = 0; x < MON_GRID; x++) {
+      if (plein[y][x]) continue;
+      const voisin =
+        (y > 0 && plein[y - 1][x]) ||
+        (y < MON_GRID - 1 && plein[y + 1][x]) ||
+        (x > 0 && plein[y][x - 1]) ||
+        (x < MON_GRID - 1 && plein[y][x + 1]);
+      if (voisin) grille[y][x] = OUTLINE;
+    }
+  }
+
+  for (let y = 0; y < MON_GRID; y++) {
+    for (let x = 0; x < MON_GRID; x++) {
+      const couleur = grille[y][x];
+      if (!couleur) continue;
+      out.fillStyle = couleur;
+      out.fillRect(x * PX, y * PX, PX, PX);
+    }
+  }
+  return sheet;
+}
+
+/** Planches repixellisées, une par sprite. `null` : le chargement est en cours. */
+const monSheets = new Map<string, HTMLCanvasElement | null>();
+
+function monSheet(url: string, fallback: string): HTMLCanvasElement | null {
+  const cached = monSheets.get(url);
+  if (cached !== undefined) return cached;
+
+  monSheets.set(url, null);
   const img = new Image();
   img.decoding = "async";
-  img.onload = () => monSprites.set(url, img);
+  // Sans cela, le canevas serait souillé et la relecture des pixels refusée.
+  img.crossOrigin = "anonymous";
+  img.onload = () => monSheets.set(url, pixelate(img));
   img.onerror = () => {
-    // Une livrée manquante — un chromatique sans sprite animé — bascule sur
-    // l'image fixe avant d'abandonner.
-    if (fallback && img.src !== fallback) img.src = fallback;
+    // Une livrée sans sprite de dos bascule sur la vue de face.
+    if (img.src !== fallback) img.src = fallback;
   };
   img.src = url;
   return null;
 }
 
-/** Hauteur du suiveur : un rien plus qu'une case, pour qu'il se remarque. */
-const MON_H = 34;
-
 /**
- * Dessine le Pokémon de tête sur sa case. Les sprites animés de la
- * Génération V s'animent tout seuls dans l'élément image : chaque passage
- * en récupère la pose du moment.
+ * Dessine le Pokémon de tête sur sa case. Tant que sa planche n'est pas
+ * prête, on ne dessine rien plutôt qu'un carré vide.
  */
 export function drawMon(
   ctx: CanvasRenderingContext2D,
@@ -349,12 +458,18 @@ export function drawMon(
   fallback: string,
   x: number,
   y: number,
+  frame: number,
 ): void {
-  const img = monSprite(url, fallback);
-  if (!img?.naturalWidth) return;
+  const sheet = monSheet(url, fallback);
+  if (!sheet) return;
 
-  const w = Math.round((MON_H * img.naturalWidth) / img.naturalHeight);
-  ctx.drawImage(img, Math.round(x + (TILE - w) / 2), Math.round(y + TILE - MON_H), w, MON_H);
+  // Un pixel de balancement à la marche, au rythme des jambes du héros.
+  const saut = frame === 2 ? PX : 0;
+  ctx.drawImage(
+    sheet,
+    Math.round(x + (TILE - MON_SIZE) / 2),
+    Math.round(y + TILE - MON_SIZE) - saut,
+  );
 }
 
 /* --------------------------------------------------------------- décors */

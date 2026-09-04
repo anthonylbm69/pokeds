@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { animatedBackUrl, animatedUrl, staticBackUrl, staticUrl } from "@/lib/pokeapi";
+import { pixelBackUrl, pixelUrl } from "@/lib/pokeapi";
 import { TILE, drawBike, drawCharacter, drawMon, drawTile, variantFor } from "@/lib/game/sprites";
 import {
   MAPS,
@@ -210,14 +210,18 @@ export default function WorldView({
         actors.push({
           y: spot.y,
           paint: () => {
-            const back = spot.dir === "up";
-            const url = back
-              ? animatedBackUrl(mon.id, mon.shiny) ?? staticBackUrl(mon.id, mon.shiny)
-              : animatedUrl(mon.id, mon.shiny) ?? staticUrl(mon.id, mon.shiny);
-            const secours = back
-              ? staticBackUrl(mon.id, mon.shiny)
-              : staticUrl(mon.id, mon.shiny);
-            drawMon(ctx, url, secours, spot.x * TILE - camX, spot.y * TILE - camY);
+            // Les sprites fixes se réduisent mieux que les animés : une pose
+            // franche, sans flou de mouvement, donne une silhouette nette.
+            const face = pixelUrl(mon.id, mon.shiny);
+            const url = spot.dir === "up" ? pixelBackUrl(mon.id, mon.shiny) : face;
+            drawMon(
+              ctx,
+              url,
+              face,
+              spot.x * TILE - camX,
+              spot.y * TILE - camY,
+              p.frame,
+            );
           },
         });
       }

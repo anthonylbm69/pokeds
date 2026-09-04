@@ -92,6 +92,19 @@ export const staticBackUrl = (id: number, shiny = false) =>
  * chromatique on passe directement au sprite classique, plutôt que d'aller
  * chercher une icône qui n'existe pas.
  */
+/**
+ * Sprites fixes de la Génération V : du pixel art dessiné à la main, et non
+ * un rendu 3D. C'est la matière dont on tire les silhouettes du suiveur —
+ * elle se réduit bien plus proprement à la maille du jeu.
+ */
+const BW = `${SPRITES}/versions/generation-v/black-white`;
+
+export const pixelUrl = (id: number, shiny = false) =>
+  `${BW}/${shiny ? "shiny/" : ""}${id}.png`;
+
+export const pixelBackUrl = (id: number, shiny = false) =>
+  `${BW}/back/${shiny ? "shiny/" : ""}${id}.png`;
+
 export const partyIconUrl = (id: number, shiny = false) =>
   shiny ? staticUrl(id, true) : iconUrl(id);
 
