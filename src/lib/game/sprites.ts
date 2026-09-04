@@ -362,6 +362,13 @@ const BIOMES: Record<Biome, Ground> = {
     canopyHigh: "#e8eef0", canopyDark: "#1f3529",
     path: "#b0aca0", pathEdge: "#9c988c", pathSpeck: "#928e83",
   },
+  neige: {
+    base: "#e4ecf1", alt: "#f2f7fa", speck: "#cbd8e0",
+    tallBase: "#c6d4dc", tallBlade: "#f2f7fa", tallDark: "#a3b4c0", tallEdge: "#b4c3cd",
+    trunk: "#4a3f34", canopy: "#27473a", canopyLight: "#35594a",
+    canopyHigh: "#fbfdff", canopyDark: "#1a3229",
+    path: "#cfd8de", pathEdge: "#b9c3ca", pathSpeck: "#adb8bf",
+  },
 };
 
 type Painter = (ctx: CanvasRenderingContext2D, v: number, g: Ground) => void;

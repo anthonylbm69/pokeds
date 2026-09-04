@@ -6,13 +6,15 @@
 export type Dir = "up" | "down" | "left" | "right";
 
 /** Gamme de couleurs du décor traversé. */
-export type Biome = "plaine" | "foret" | "desert" | "montagne";
+export type Biome = "plaine" | "foret" | "desert" | "montagne" | "neige";
 
 export type MapId =
   | "bourg" | "maison" | "route1" | "route2" | "centre"
   | "route3" | "maillard" | "centre2" | "arene" | "velo" | "maison2"
   | "route4" | "aigueperse" | "centre3" | "arene2" | "maison3"
-  | "route5" | "route6" | "mions" | "centre4" | "arene3" | "maison4";
+  | "route5" | "route6" | "mions" | "centre4" | "arene3" | "maison4"
+  | "route7" | "route8" | "ligue" | "centre5"
+  | "ligue1" | "ligue2" | "ligue3" | "ligue4" | "ligue5";
 
 export type TileKind =
   | "grass" | "tall" | "path" | "flower" | "tree" | "water"
@@ -79,7 +81,18 @@ export type NpcSpec = {
   bike?: boolean;
 };
 
-export type Warp = { x: number; y: number; to: MapId; tx: number; ty: number; dir?: Dir };
+export type Warp = {
+  x: number;
+  y: number;
+  to: MapId;
+  tx: number;
+  ty: number;
+  dir?: Dir;
+  /** Marqueurs exigés pour franchir la porte : insignes, victoires… */
+  needs?: string[];
+  /** Ce que l'on entend quand il en manque un. */
+  refusal?: string[];
+};
 
 export type Encounter = { id: number; min: number; max: number; weight: number };
 
@@ -1228,7 +1241,7 @@ export const MAPS: Record<MapId, MapSpec> = {
     name: "Mions",
     biome: "montagne",
     tiles: [
-      "####################",
+      "#########==#########",
       "##.......==.......##",
       "##..TTTT.==.TTTT..##",
       "##..TTTT.==.TTTT..##",
@@ -1276,6 +1289,8 @@ export const MAPS: Record<MapId, MapSpec> = {
     warps: [
       { x: 9, y: 19, to: "route6", tx: 9, ty: 1, dir: "down" },
       { x: 10, y: 19, to: "route6", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "route7", tx: 9, ty: 22, dir: "up" },
+      { x: 10, y: 0, to: "route7", tx: 10, ty: 22, dir: "up" },
       { x: 6, y: 4, to: "maison4", tx: 4, ty: 6, dir: "up" },
       { x: 5, y: 10, to: "centre4", tx: 6, ty: 8, dir: "up" },
       { x: 14, y: 10, to: "arene3", tx: 6, ty: 12, dir: "up" },
@@ -1462,6 +1477,655 @@ export const MAPS: Record<MapId, MapSpec> = {
     ],
     signs: [],
   },
+
+  /* ============================================ la montée vers la Ligue */
+
+  route7: {
+    name: "Route 7",
+    biome: "neige",
+    tiles: [
+      "#########==#########",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==U......##",
+      "##,,,,,..==..,,,,,##",
+      "##,,,,,..==..,,,,,##",
+      "##.......==.......##",
+      "##.#####.==.#####.##",
+      "##.#####.==.#####.##",
+      "##.......==.......##",
+      "##..,,,,,==,,,,,..##",
+      "##..,,,,,==,,,,,..##",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##,,,,...==...,,,,##",
+      "##,,,,...==...,,,,##",
+      "##.......==.......##",
+      "##.#####.==.#####.##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "skieuse-nina",
+        x: 12,
+        y: 19,
+        dir: "left",
+        sprite: "exploratrice",
+        lines: ["Le col reste blanc toute l'année. Couvre-toi bien."],
+        trainer: {
+          title: "Skieuse",
+          name: "Nina",
+          sight: 3,
+          reward: 1520,
+          team: [
+            { id: 508, level: 29 },
+            { id: 521, level: 30 },
+          ],
+          intro: ["On ne franchit pas le col sans un combat !"],
+          defeat: ["Tu tiens debout sur la glace, bravo."],
+          after: ["Encore une route et tu verras le Plateau."],
+        },
+      },
+      {
+        id: "montagnard-hugo",
+        x: 7,
+        y: 10,
+        dir: "right",
+        sprite: "villageois",
+        lines: ["Trois insignes ne suffiront pas contre la Ligue. Entraîne-toi."],
+        trainer: {
+          title: "Montagnard",
+          name: "Hugo",
+          sight: 3,
+          reward: 1400,
+          team: [{ id: 248, level: 31 }],
+          intro: ["Mon Tyranocif n'a jamais reculé. Voyons le tien."],
+          defeat: ["De la roche contre de la roche… tu as gagné."],
+          after: ["La Ligue t'attend, plus haut."],
+        },
+      },
+    ],
+    warps: [
+      { x: 9, y: 23, to: "mions", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 23, to: "mions", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "route8", tx: 9, ty: 20, dir: "up" },
+      { x: 10, y: 0, to: "route8", tx: 10, ty: 20, dir: "up" },
+    ],
+    signs: [
+      { x: 4, y: 22, text: ["ROUTE 7 — LE COL BLANC", "Mions au sud. Le Plateau au nord."] },
+    ],
+    encounters: [
+      { id: 508, min: 28, max: 31, weight: 30 },
+      { id: 521, min: 28, max: 31, weight: 25 },
+      { id: 529, min: 29, max: 32, weight: 25 },
+      { id: 248, min: 30, max: 33, weight: 20 },
+    ],
+  },
+
+  route8: {
+    name: "Route 8",
+    biome: "montagne",
+    tiles: [
+      "#########==#########",
+      "##.......==.......##",
+      "##,,,,,..==..,,,,,##",
+      "##,,,,,..==..,,,,,##",
+      "##.......==U......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##.#####.==.#####.##",
+      "##.#####.==.#####.##",
+      "##.......==.......##",
+      "##..,,,,,==,,,,,..##",
+      "##..,,,,,==,,,,,..##",
+      "##.......==.......##",
+      "##..###..==..###..##",
+      "##..###..==..###..##",
+      "##.......==.......##",
+      "##,,,,...==...,,,,##",
+      "##,,,,...==...,,,,##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "veterane-sasha",
+        x: 12,
+        y: 17,
+        dir: "left",
+        sprite: "championne",
+        lines: ["Je m'entraîne ici depuis vingt ans. La Ligue, c'est autre chose."],
+        trainer: {
+          title: "Vétérane",
+          name: "Sasha",
+          sight: 3,
+          reward: 2100,
+          team: [
+            { id: 503, level: 33 },
+            { id: 448, level: 34 },
+          ],
+          intro: ["Dernier avertissement avant le Plateau. En garde !"],
+          defeat: ["Tu es prêt. Vraiment prêt."],
+          after: ["Soigne ton équipe là-haut avant d'entrer. Crois-moi."],
+        },
+      },
+      {
+        id: "portier-route8",
+        x: 8,
+        y: 7,
+        dir: "right",
+        sprite: "gamin",
+        lines: [
+          "Le Plateau est juste au-dessus.",
+          "Sans les trois insignes, les portes de la Ligue restent closes.",
+        ],
+      },
+    ],
+    warps: [
+      { x: 9, y: 21, to: "route7", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 21, to: "route7", tx: 10, ty: 1, dir: "down" },
+      { x: 9, y: 0, to: "ligue", tx: 9, ty: 14, dir: "up" },
+      { x: 10, y: 0, to: "ligue", tx: 10, ty: 14, dir: "up" },
+    ],
+    signs: [
+      { x: 4, y: 20, text: ["ROUTE 8 — LA MONTÉE", "Plus qu'un effort avant le Plateau."] },
+    ],
+    encounters: [
+      { id: 248, min: 32, max: 35, weight: 30 },
+      { id: 448, min: 32, max: 35, weight: 20 },
+      { id: 508, min: 32, max: 35, weight: 25 },
+      { id: 130, min: 33, max: 36, weight: 25 },
+    ],
+  },
+
+  ligue: {
+    name: "Plateau de la Ligue",
+    biome: "montagne",
+    tiles: [
+      "####################",
+      "##..TTTTTTTTTTTT..##",
+      "##..TTTTTTTTTTTT..##",
+      "##..TTTTTTTTTTTT..##",
+      "##..WWWWWDDWWWWW..##",
+      "##.......==.......##",
+      "##.......==U......##",
+      "##..TTTT.==.......##",
+      "##..WWDW.==.......##",
+      "##.......==.......##",
+      "##..S....==.......##",
+      "##.......==.......##",
+      "##..~~~..==..~~~..##",
+      "##..~~~..==..~~~..##",
+      "##.......==.......##",
+      "#########==#########",
+    ],
+    npcs: [
+      {
+        id: "huissier-ligue",
+        x: 12,
+        y: 5,
+        dir: "left",
+        sprite: "vendeur",
+        lines: [
+          "Bienvenue au Plateau de la Ligue Pokémon.",
+          "Derrière ces portes : Yen, Christina, Will et Vic — puis leur capitaine.",
+          "On ne ressort pas de la salle d'un membre sans l'avoir battu.",
+        ],
+      },
+    ],
+    warps: [
+      { x: 9, y: 15, to: "route8", tx: 9, ty: 1, dir: "down" },
+      { x: 10, y: 15, to: "route8", tx: 10, ty: 1, dir: "down" },
+      {
+        x: 9,
+        y: 4,
+        to: "ligue1",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["insigne:trio", "insigne:sylve", "insigne:roc"],
+        refusal: [
+          "Les portes de la Ligue restent closes.",
+          "Il faut les trois insignes de la région pour entrer.",
+        ],
+      },
+      {
+        x: 10,
+        y: 4,
+        to: "ligue1",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["insigne:trio", "insigne:sylve", "insigne:roc"],
+        refusal: [
+          "Les portes de la Ligue restent closes.",
+          "Il faut les trois insignes de la région pour entrer.",
+        ],
+      },
+      { x: 6, y: 8, to: "centre5", tx: 6, ty: 8, dir: "up" },
+    ],
+    signs: [
+      {
+        x: 4,
+        y: 10,
+        text: [
+          "PLATEAU DE LA LIGUE",
+          "Ici s'arrêtent les Dresseurs. Ici commencent les champions.",
+        ],
+      },
+    ],
+  },
+
+  centre5: {
+    name: "Centre Pokémon",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXXXX",
+      "X-CCC--CCC-X",
+      "X-CCC--CCC-X",
+      "X----------X",
+      "X-B------B-X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "infirmiere5",
+        x: 3,
+        y: 3,
+        dir: "down",
+        sprite: "infirmiere",
+        heals: true,
+        lines: [
+          "Bienvenue au Centre Pokémon du Plateau !",
+          "C'est ici que l'on souffle avant d'affronter la Ligue…",
+        ],
+      },
+      {
+        id: "vendeur5",
+        x: 8,
+        y: 3,
+        dir: "down",
+        sprite: "vendeur",
+        shop: true,
+        lines: ["Bienvenue à la Boutique ! Prenez des Potions, beaucoup."],
+      },
+    ],
+    warps: [
+      { x: 5, y: 9, to: "ligue", tx: 6, ty: 9, dir: "down" },
+      { x: 6, y: 9, to: "ligue", tx: 6, ty: 9, dir: "down" },
+    ],
+    signs: [],
+  },
+
+  ligue1: {
+    name: "Ligue — Yen",
+    indoor: true,
+    tiles: [
+      "XXXXXDDXXXXX",
+      "XEEEE--EEEEX",
+      "XEEEE--EEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "ligue-yen",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "championne",
+        lines: ["Passe. La porte du fond t'est ouverte."],
+        trainer: {
+          title: "Conseil 4",
+          name: "Yen",
+          sight: 3,
+          reward: 5200,
+          team: [
+            { id: 510, level: 49 },
+            { id: 551, level: 50 },
+            { id: 248, level: 52 },
+          ],
+          intro: [
+            "Je suis Yen, premier membre du Conseil 4.",
+            "L'ombre ne pardonne pas l'hésitation.",
+          ],
+          defeat: ["Tu as vu dans le noir. Passe."],
+          after: ["La porte du fond mène à Christina. Elle ne sera pas plus tendre."],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "ligue", tx: 9, ty: 5, dir: "down" },
+      { x: 6, y: 13, to: "ligue", tx: 9, ty: 5, dir: "down" },
+      {
+        x: 5,
+        y: 0,
+        to: "ligue2",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-yen"],
+        refusal: ["La porte ne s'ouvre pas.", "Yen doit d'abord être battue."],
+      },
+      {
+        x: 6,
+        y: 0,
+        to: "ligue2",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-yen"],
+        refusal: ["La porte ne s'ouvre pas.", "Yen doit d'abord être battue."],
+      },
+    ],
+    signs: [],
+  },
+
+  ligue2: {
+    name: "Ligue — Christina",
+    indoor: true,
+    tiles: [
+      "XXXXXDDXXXXX",
+      "XEEEE--EEEEX",
+      "XEEEE--EEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "ligue-christina",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "infirmiere",
+        lines: ["Continue. Will attend derrière moi."],
+        trainer: {
+          title: "Conseil 4",
+          name: "Christina",
+          sight: 3,
+          reward: 5600,
+          team: [
+            { id: 502, level: 50 },
+            { id: 503, level: 51 },
+            { id: 130, level: 53 },
+          ],
+          intro: [
+            "Christina, deuxième membre du Conseil 4.",
+            "L'eau finit toujours par user la pierre. Voyons ta patience.",
+          ],
+          defeat: ["Le courant t'a porté. Bien."],
+          after: ["Will vole plus haut que moi. Prends garde à ton dos."],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "ligue1", tx: 6, ty: 1, dir: "down" },
+      { x: 6, y: 13, to: "ligue1", tx: 6, ty: 1, dir: "down" },
+      {
+        x: 5,
+        y: 0,
+        to: "ligue3",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-christina"],
+        refusal: ["La porte ne s'ouvre pas.", "Christina doit d'abord être battue."],
+      },
+      {
+        x: 6,
+        y: 0,
+        to: "ligue3",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-christina"],
+        refusal: ["La porte ne s'ouvre pas.", "Christina doit d'abord être battue."],
+      },
+    ],
+    signs: [],
+  },
+
+  ligue3: {
+    name: "Ligue — Will",
+    indoor: true,
+    tiles: [
+      "XXXXXDDXXXXX",
+      "XEEEE--EEEEX",
+      "XEEEE--EEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "ligue-will",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "prof",
+        lines: ["Le ciel t'a laissé passer. Vic est au fond."],
+        trainer: {
+          title: "Conseil 4",
+          name: "Will",
+          sight: 3,
+          reward: 6000,
+          team: [
+            { id: 520, level: 51 },
+            { id: 521, level: 52 },
+            { id: 384, level: 54 },
+          ],
+          intro: [
+            "Will, troisième membre du Conseil 4.",
+            "Depuis le ciel, on voit venir tous les coups. Essaie quand même.",
+          ],
+          defeat: ["Tu m'as pris de vitesse. Rare."],
+          after: ["Vic tient la salle suivante. Il ne bouge pas d'un pouce."],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "ligue2", tx: 6, ty: 1, dir: "down" },
+      { x: 6, y: 13, to: "ligue2", tx: 6, ty: 1, dir: "down" },
+      {
+        x: 5,
+        y: 0,
+        to: "ligue4",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-will"],
+        refusal: ["La porte ne s'ouvre pas.", "Will doit d'abord être battu."],
+      },
+      {
+        x: 6,
+        y: 0,
+        to: "ligue4",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-will"],
+        refusal: ["La porte ne s'ouvre pas.", "Will doit d'abord être battu."],
+      },
+    ],
+    signs: [],
+  },
+
+  ligue4: {
+    name: "Ligue — Vic",
+    indoor: true,
+    tiles: [
+      "XXXXXDDXXXXX",
+      "XEEEE--EEEEX",
+      "XEEEE--EEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "ligue-vic",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "villageois",
+        lines: ["La dernière porte est à toi. Eren t'attend."],
+        trainer: {
+          title: "Conseil 4",
+          name: "Vic",
+          sight: 3,
+          reward: 6400,
+          team: [
+            { id: 529, level: 52 },
+            { id: 557, level: 53 },
+            { id: 448, level: 55 },
+          ],
+          intro: [
+            "Vic, quatrième et dernier rempart avant le capitaine.",
+            "Rien ne passe. Jamais. Prouve-moi le contraire.",
+          ],
+          defeat: ["Le rempart est tombé. Va-t'en le voir."],
+          after: [
+            "Derrière cette porte se tient Eren, notre capitaine.",
+            "Personne ne l'a battu. Personne.",
+          ],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "ligue3", tx: 6, ty: 1, dir: "down" },
+      { x: 6, y: 13, to: "ligue3", tx: 6, ty: 1, dir: "down" },
+      {
+        x: 5,
+        y: 0,
+        to: "ligue5",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-vic"],
+        refusal: ["La porte ne s'ouvre pas.", "Vic doit d'abord être battu."],
+      },
+      {
+        x: 6,
+        y: 0,
+        to: "ligue5",
+        tx: 6,
+        ty: 12,
+        dir: "up",
+        needs: ["battu:ligue-vic"],
+        refusal: ["La porte ne s'ouvre pas.", "Vic doit d'abord être battu."],
+      },
+    ],
+    signs: [],
+  },
+
+  ligue5: {
+    name: "Ligue — Eren",
+    indoor: true,
+    // Pas de porte au fond : la salle du capitaine est un cul-de-sac.
+    tiles: [
+      "XXXXXXXXXXXX",
+      "XEEEEEEEEEEX",
+      "XEEEEEEEEEEX",
+      "X----------X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X-AAAAAAAA-X",
+      "X----------X",
+      "XEE------EEX",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "ligue-eren",
+        x: 6,
+        y: 3,
+        dir: "down",
+        sprite: "championne",
+        lines: ["Le titre est à toi. Porte-le mieux que je ne l'ai porté."],
+        trainer: {
+          title: "Capitaine",
+          name: "Eren",
+          sight: 3,
+          reward: 12000,
+          badge: "ligue",
+          team: [
+            { id: 497, level: 55 },
+            { id: 500, level: 56 },
+            { id: 643, level: 58 },
+            { id: 644, level: 60 },
+          ],
+          intro: [
+            "Alors c'est toi. Quatre victoires pour arriver jusqu'ici.",
+            "Je suis Eren, capitaine du Conseil 4. On ne m'a jamais battu.",
+            "Montre-moi ce que valent tes six compagnons.",
+          ],
+          defeat: [
+            "…",
+            "Je n'avais jamais vu ça. Pas une seule fois en dix ans.",
+          ],
+          after: [
+            "Tu es le nouveau Maître de la Ligue Pokémon.",
+            "Ton nom rejoint le Panthéon, avec celui de ton équipe.",
+            "Merci d'avoir joué !",
+          ],
+        },
+      },
+    ],
+    warps: [
+      { x: 5, y: 13, to: "ligue4", tx: 6, ty: 1, dir: "down" },
+      { x: 6, y: 13, to: "ligue4", tx: 6, ty: 1, dir: "down" },
+    ],
+    signs: [],
+  },
 };
 
 /* ------------------------------------------------- la carte de la région */
@@ -1484,16 +2148,27 @@ export type RegionNode = {
  * foi : les liaisons sont tracées d'un nœud au suivant.
  */
 export const REGION: RegionNode[] = [
-  { map: "bourg", label: "Renouet Bourg", short: "Renouet", kind: "ville", biome: "plaine", x: 16, y: 92, inside: ["maison"] },
-  { map: "route1", label: "Route 1", short: "R1", kind: "route", biome: "plaine", x: 16, y: 79 },
-  { map: "route2", label: "Route 2", short: "R2", kind: "route", biome: "plaine", x: 29, y: 71, inside: ["centre"] },
-  { map: "route3", label: "Route 3", short: "R3", kind: "route", biome: "plaine", x: 22, y: 60 },
-  { map: "maillard", label: "Maillard", short: "Maillard", kind: "ville", biome: "plaine", x: 37, y: 51, inside: ["centre2", "arene", "velo", "maison2"] },
-  { map: "route4", label: "Route 4", short: "R4", kind: "route", biome: "foret", x: 53, y: 56 },
-  { map: "aigueperse", label: "Aigueperse", short: "Aigueperse", kind: "ville", biome: "foret", x: 65, y: 45, inside: ["centre3", "arene2", "maison3"] },
-  { map: "route5", label: "Route 5", short: "R5", kind: "route", biome: "desert", x: 79, y: 34 },
-  { map: "route6", label: "Route 6", short: "R6", kind: "route", biome: "montagne", x: 66, y: 21 },
-  { map: "mions", label: "Mions", short: "Mions", kind: "ville", biome: "montagne", x: 80, y: 9, inside: ["centre4", "arene3", "maison4"] },
+  { map: "bourg", label: "Renouet Bourg", short: "Renouet", kind: "ville", biome: "plaine", x: 12, y: 93, inside: ["maison"] },
+  { map: "route1", label: "Route 1", short: "R1", kind: "route", biome: "plaine", x: 12, y: 82 },
+  { map: "route2", label: "Route 2", short: "R2", kind: "route", biome: "plaine", x: 24, y: 76, inside: ["centre"] },
+  { map: "route3", label: "Route 3", short: "R3", kind: "route", biome: "plaine", x: 20, y: 66 },
+  { map: "maillard", label: "Maillard", short: "Maillard", kind: "ville", biome: "plaine", x: 32, y: 60, inside: ["centre2", "arene", "velo", "maison2"] },
+  { map: "route4", label: "Route 4", short: "R4", kind: "route", biome: "foret", x: 46, y: 64 },
+  { map: "aigueperse", label: "Aigueperse", short: "Aigueperse", kind: "ville", biome: "foret", x: 58, y: 56, inside: ["centre3", "arene2", "maison3"] },
+  { map: "route5", label: "Route 5", short: "R5", kind: "route", biome: "desert", x: 72, y: 50 },
+  { map: "route6", label: "Route 6", short: "R6", kind: "route", biome: "montagne", x: 62, y: 38 },
+  { map: "mions", label: "Mions", short: "Mions", kind: "ville", biome: "montagne", x: 74, y: 31, inside: ["centre4", "arene3", "maison4"] },
+  { map: "route7", label: "Route 7", short: "R7", kind: "route", biome: "neige", x: 86, y: 23 },
+  { map: "route8", label: "Route 8", short: "R8", kind: "route", biome: "montagne", x: 74, y: 14 },
+  {
+    map: "ligue",
+    label: "Plateau de la Ligue",
+    short: "LIGUE",
+    kind: "ville",
+    biome: "montagne",
+    x: 86, y: 6,
+    inside: ["centre5", "ligue1", "ligue2", "ligue3", "ligue4", "ligue5"],
+  },
 ];
 
 /** Nœud de la carte où se trouve le joueur, intérieurs compris. */
@@ -1506,11 +2181,11 @@ export type BusStop = {
   map: MapId;
   label: string;
   /**
-   * Insigne exigé pour descendre ici. Une ville et les routes qui y mènent
-   * partagent le même : sans l'insigne Roc, ni Mions ni ses deux routes ne
-   * sont desservies.
+   * Insignes exigés pour descendre ici. Une ville et les routes qui y mènent
+   * partagent les mêmes : sans l'insigne Roc, ni Mions ni ses deux routes ne
+   * sont desservies. Le Plateau, lui, réclame les trois.
    */
-  badge: "trio" | "sylve" | "roc" | null;
+  badges: string[];
   /** Où le car dépose : toujours le chemin, juste à côté de l'arrêt. */
   x: number;
   y: number;
@@ -1518,16 +2193,25 @@ export type BusStop = {
 
 /** Le réseau, du sud au nord. */
 export const BUS_STOPS: BusStop[] = [
-  { map: "bourg", label: "Renouet Bourg", badge: null, x: 10, y: 6 },
-  { map: "route1", label: "Route 1", badge: null, x: 10, y: 8 },
-  { map: "route2", label: "Route 2", badge: "trio", x: 10, y: 8 },
-  { map: "route3", label: "Route 3", badge: "trio", x: 10, y: 4 },
-  { map: "maillard", label: "Maillard", badge: "trio", x: 10, y: 5 },
-  { map: "route4", label: "Route 4 — la hêtraie", badge: "sylve", x: 10, y: 4 },
-  { map: "aigueperse", label: "Aigueperse", badge: "sylve", x: 10, y: 6 },
-  { map: "route5", label: "Route 5 — les sables", badge: "roc", x: 10, y: 4 },
-  { map: "route6", label: "Route 6 — la crête", badge: "roc", x: 10, y: 4 },
-  { map: "mions", label: "Mions", badge: "roc", x: 10, y: 6 },
+  { map: "bourg", label: "Renouet Bourg", badges: [], x: 10, y: 6 },
+  { map: "route1", label: "Route 1", badges: [], x: 10, y: 8 },
+  { map: "route2", label: "Route 2", badges: ["trio"], x: 10, y: 8 },
+  { map: "route3", label: "Route 3", badges: ["trio"], x: 10, y: 4 },
+  { map: "maillard", label: "Maillard", badges: ["trio"], x: 10, y: 5 },
+  { map: "route4", label: "Route 4 — la hêtraie", badges: ["sylve"], x: 10, y: 4 },
+  { map: "aigueperse", label: "Aigueperse", badges: ["sylve"], x: 10, y: 6 },
+  { map: "route5", label: "Route 5 — les sables", badges: ["roc"], x: 10, y: 4 },
+  { map: "route6", label: "Route 6 — la crête", badges: ["roc"], x: 10, y: 4 },
+  { map: "mions", label: "Mions", badges: ["roc"], x: 10, y: 6 },
+  { map: "route7", label: "Route 7 — le col blanc", badges: ["roc"], x: 10, y: 4 },
+  { map: "route8", label: "Route 8 — la montée", badges: ["roc"], x: 10, y: 4 },
+  {
+    map: "ligue",
+    label: "Plateau de la Ligue",
+    badges: ["trio", "sylve", "roc"],
+    x: 10,
+    y: 6,
+  },
 ];
 
 export const busStopOf = (map: MapId) =>

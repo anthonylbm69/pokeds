@@ -116,12 +116,6 @@ const INTRO = [
 
 const ENCOUNTER_RATE = 0.14;
 
-/**
- * Le code de triche : cinq fois à gauche, deux fois à droite. Seuls les
- * appuis volontaires comptent — la répétition automatique de la marche est
- * écartée — et la séquence entière doit tenir dans la fenêtre ci-dessous,
- * sinon marcher de long en large finirait par la composer par accident.
- */
 /** Durée du trajet en autocar, animation comprise. */
 const RIDE_MS = 2800;
 
@@ -131,6 +125,12 @@ const BADGE_LABEL: Record<string, string> = {
   roc: "insigne Roc",
 };
 
+/**
+ * Le code de triche : cinq fois à gauche, deux fois à droite. Seuls les
+ * appuis volontaires comptent — la répétition automatique de la marche est
+ * écartée — et la séquence entière doit tenir dans la fenêtre ci-dessous,
+ * sinon marcher de long en large finirait par la composer par accident.
+ */
 const CHEAT_LEFTS = 5;
 const CHEAT_RIGHTS = 2;
 const CHEAT_WINDOW = 3000;
@@ -436,6 +436,18 @@ export function useGame({
 
       const warp = warpAt(current, x, y);
       if (warp) {
+        // Portes du Plateau et salles de la Ligue : on ne passe qu'avec les
+        // insignes en poche, ou une fois le membre du Conseil 4 battu.
+        if (warp.needs?.some((flag) => !hasFlag(game, flag))) {
+          setPhase({
+            kind: "text",
+            lines: warp.refusal ?? ["La porte ne s'ouvre pas."],
+            i: 0,
+            then: null,
+          });
+          return;
+        }
+
         const moved: GameState = {
           ...game,
           map: warp.to,
@@ -816,15 +828,19 @@ export function useGame({
         layout: "list",
         list: [
           ...BUS_STOPS.filter((stop) => stop.map !== game.map).map((stop) => {
-            const ouvert = !stop.badge || hasFlag(game, `insigne:${stop.badge}`);
+            const manquants = stop.badges.filter(
+              (badge) => !hasFlag(game, `insigne:${badge}`),
+            );
             return {
               id: stop.map,
               label: stop.label,
-              sub: ouvert
+              sub: !manquants.length
                 ? "desservi"
-                : `${BADGE_LABEL[stop.badge!]} exigé`,
-              disabled: !ouvert,
-              tone: (ouvert ? "bag" : "back") as Choice["tone"],
+                : manquants.length === 1
+                  ? `${BADGE_LABEL[manquants[0]]} exigé`
+                  : `${manquants.length} insignes exigés`,
+              disabled: manquants.length > 0,
+              tone: (manquants.length ? "back" : "bag") as Choice["tone"],
             };
           }),
           { id: "leave", label: "RENONCER", tone: "back" },

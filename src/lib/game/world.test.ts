@@ -186,15 +186,22 @@ describe("les Cars Faure", () => {
       ),
     );
     for (const stop of BUS_STOPS) {
-      if (!stop.badge) continue;
-      expect(remis.has(stop.badge), `insigne « ${stop.badge} » jamais remis`).toBe(true);
+      for (const badge of stop.badges) {
+        expect(remis.has(badge), `insigne « ${badge} » jamais remis`).toBe(true);
+      }
     }
   });
 
   it("laissent le départ accessible sans le moindre insigne", () => {
-    const libres = BUS_STOPS.filter((stop) => !stop.badge).map((stop) => stop.map);
+    const libres = BUS_STOPS.filter((stop) => !stop.badges.length).map((stop) => stop.map);
     expect(libres).toContain("bourg");
     expect(libres.length).toBeGreaterThan(0);
+  });
+
+  it("réservent le Plateau à qui possède les trois insignes", () => {
+    const plateau = BUS_STOPS.find((stop) => stop.map === "ligue");
+    expect(plateau, "aucun arrêt au Plateau").toBeDefined();
+    expect(plateau!.badges).toHaveLength(3);
   });
 });
 
