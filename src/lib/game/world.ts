@@ -3,7 +3,7 @@
  * passages et les tables de rencontre vivent à côté de la grille.
  */
 
-import { WILD_POOL } from "./dex";
+import { DEX, WILD_POOL } from "./dex";
 
 export type Dir = "up" | "down" | "left" | "right";
 
@@ -24,7 +24,7 @@ export type TileKind =
   | "wall" | "inwall" | "roof" | "door" | "floor" | "counter" | "furniture" | "sign"
   | "arena" | "stands" | "bus" | "pc" | "roche" | "caillou";
 
-type Tile = { kind: TileKind; solid: boolean; encounter?: boolean };
+type Tile = { kind: TileKind; solid: boolean; encounter?: boolean; swim?: boolean };
 
 export const TILES: Record<string, Tile> = {
   ".": { kind: "grass", solid: false },
@@ -32,7 +32,8 @@ export const TILES: Record<string, Tile> = {
   "=": { kind: "path", solid: false },
   F: { kind: "flower", solid: false },
   "#": { kind: "tree", solid: true },
-  "~": { kind: "water", solid: true },
+  // L'eau n'est franchissable qu'en Surf : `walkable` s'en charge.
+  "~": { kind: "water", solid: true, swim: true },
   W: { kind: "wall", solid: true },
   X: { kind: "inwall", solid: true },
   T: { kind: "roof", solid: true },
@@ -81,6 +82,8 @@ export type NpcSpec = {
    * fois vaincu ou capturé, il ne revient pas.
    */
   mon?: { id: number; level: number; shiny?: boolean; floats?: boolean };
+  /** Marqueurs exigés pour que ce personnage soit là : il n'existe pas avant. */
+  needs?: string[];
   lines: string[];
   trainer?: TrainerSpec;
   /** Soigne l'équipe après la réplique. */
@@ -2193,6 +2196,21 @@ export const MAPS: Record<MapId, MapSpec> = {
     ],
     npcs: [
       {
+        // La cavité s'ouvre plus loin qu'on ne le croyait : elle attendait
+        // un Dresseur digne d'aller au fond.
+        id: "giratina",
+        x: 3,
+        y: 10,
+        dir: "down",
+        mon: { id: 487, level: 70, floats: true },
+        needs: ["insigne:ligue"],
+        lines: [
+          "Au fond de la caverne, une faille que vous n'aviez jamais vue.",
+          "Quelque chose en sort — immense, silencieux, et manifestement fâché.",
+          "Giratina !",
+        ],
+      },
+      {
         id: "mew",
         x: 7,
         y: 4,
@@ -2342,11 +2360,18 @@ export function walkable(
   x: number,
   y: number,
   npcs: { x: number; y: number; hidden?: boolean }[],
+  /** En Surf : l'eau devient praticable, la terre ferme le reste aussi. */
+  surfing = false,
 ): boolean {
   const tile = tileAt(map, x, y);
-  if (!tile || tile.solid) return false;
+  if (!tile) return false;
+  if (tile.solid && !(surfing && tile.swim)) return false;
   return !npcs.some((n) => !n.hidden && n.x === x && n.y === y);
 }
+
+/** Y a-t-il de l'eau ici ? Sert à savoir quand on embarque et quand on pose pied à terre. */
+export const isWater = (map: MapSpec, x: number, y: number) =>
+  Boolean(tileAt(map, x, y)?.swim);
 
 export const warpAt = (map: MapSpec, x: number, y: number) =>
   map.warps.find((w) => w.x === x && w.y === y) ?? null;
@@ -2400,6 +2425,26 @@ export function followerSpot(t: Trail): { x: number; y: number; dir: Dir } {
  * six cent quarante-neuf premières espèces, légendaires exceptés.
  */
 export const LOCAL_SHARE = 0.35;
+
+/**
+ * Ce que l'on croise en Surf : les espèces d'eau du Pokédex, quel que soit
+ * l'endroit. Une rive reste une rive.
+ */
+export const WATER_POOL: number[] = WILD_POOL.filter((id) =>
+  DEX[id][2].includes("water"),
+);
+
+/** Niveaux des rencontres en mer : plus haut qu'en bordure de route. */
+const WATER_LEVELS: [number, number] = [15, 35];
+
+/** Tire une rencontre marine. Les tables des cartes ne s'appliquent pas ici. */
+export function rollWaterEncounter(): { id: number; level: number } {
+  const [min, max] = WATER_LEVELS;
+  return {
+    id: WATER_POOL[Math.floor(Math.random() * WATER_POOL.length)],
+    level: min + Math.floor(Math.random() * (max - min + 1)),
+  };
+}
 
 /**
  * Tire une rencontre dans les hautes herbes. Les poids de la carte fixent

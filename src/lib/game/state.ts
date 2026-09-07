@@ -43,6 +43,8 @@ export type GameState = {
   music: boolean;
   /** Le Pokémon de tête marche derrière le joueur. */
   follower: boolean;
+  /** Sur l'eau : le joueur avance à dos de Pokémon. */
+  surfing: boolean;
   /** Starter reçu : l'Arène s'en sert pour composer son équipe. */
   starter?: number;
   /** Événements franchis : starter reçu, dresseurs battus… */
@@ -129,6 +131,7 @@ export function newGame(name: string): GameState {
     riding: false,
     music: true,
     follower: true,
+    surfing: false,
     flags: [],
     seen: [],
     caught: [],
@@ -222,6 +225,14 @@ const HUMEURS: Partial<Record<TypeName, string>> = {
   steel: "cliquette à chaque pas sur le chemin.",
   fairy: "tourne autour de vous en pépiant.",
 };
+
+/**
+ * L'insigne qui autorise le Surf. C'est celui de Mions, le troisième :
+ * franchir l'eau ouvre des rives que l'on ne pouvait pas atteindre à pied.
+ */
+export const SURF_BADGE = "roc";
+
+export const canSurf = (state: GameState) => hasFlag(state, `insigne:${SURF_BADGE}`);
 
 /* -------------------------------------------------------------------- PC */
 
@@ -329,6 +340,8 @@ export function loadGame(): GameState | null {
       balls: undefined,
       potions: undefined,
       follower: data.follower ?? true,
+      // On ne reprend jamais une partie au milieu de l'eau.
+      surfing: false,
       box: (data.box ?? []).map((mon) => ({
         ...mon,
         shiny: mon.shiny ?? false,

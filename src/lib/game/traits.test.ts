@@ -165,8 +165,10 @@ describe("les talents en combat", () => {
   it("laissent survivre à un coup fatal depuis le maximum", () => {
     // Pomdepik a Fermeté — Racaillou, lui, porte Tête de Roc.
     expect(abilityRules(204).sturdy).toBe(true);
+    // Une attaque qui ne rate jamais : Hydrocanon manque une fois sur cinq
+    // et laisserait la cible intacte, ce qui n'a rien à voir avec Fermeté.
     const mine = solide(497, 80);
-    mine.moves = [{ id: "hydrocanon", pp: 30, max: 30 }];
+    mine.moves = [{ id: "plaquage", pp: 30, max: 30 }];
     const foe = solide(204, 5);
     foe.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
     const { state, messages } = duel(mine, foe);

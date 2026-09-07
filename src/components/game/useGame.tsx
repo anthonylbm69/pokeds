@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import {
+  MAX_LEVEL,
   MOVES,
   TYPE_FR,
   expForLevel,
@@ -12,6 +13,7 @@ import {
 import {
   ITEMS,
   ITEM_ORDER,
+  SHOP_STOCK,
   countOf,
   effectOn,
   type ItemId,
@@ -34,7 +36,9 @@ import {
   STEP,
   busStopOf,
   followerSpot,
+  isWater,
   rollEncounter,
+  rollWaterEncounter,
   seesPlayer,
   signAt,
   tileAt,
@@ -52,6 +56,7 @@ import {
   followerLine,
   depositMon,
   giveStarter,
+  canSurf,
   hasFlag,
   healParty,
   loadGame,
@@ -95,6 +100,7 @@ type Then =
   | { do: "starter" }
   | { do: "heal"; respawn: boolean }
   | { do: "trainer"; npc: string }
+  | { do: "revanche"; npc: string }
   | { do: "statique"; npc: string }
   | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
@@ -120,7 +126,7 @@ type Phase =
 
 /** Les rayons, aux prix d'Unys. */
 const STOCK: Record<Counter, { id: string; label: string; price: number }[]> = {
-  boutique: ITEM_ORDER.map((id) => ({ id, label: ITEMS[id].name, price: ITEMS[id].price })),
+  boutique: SHOP_STOCK.map((id) => ({ id, label: ITEMS[id].name, price: ITEMS[id].price })),
   velo: [{ id: "bike", label: "VÉLO", price: BIKE_PRICE }],
 };
 
@@ -137,6 +143,15 @@ const ENCOUNTER_RATE = 0.14;
 
 /** Durée du trajet en autocar, animation comprise. */
 const RIDE_MS = 2800;
+
+/**
+ * Une fois la Ligue tombée, les dresseurs déjà battus veulent leur revanche,
+ * et reviennent bien plus haut. Une seule fois chacun.
+ */
+const REMATCH_BOOST = 25;
+
+/** Nombre d'espèces attrapées qui vaut la Master Ball du Professeur. */
+const DEX_REWARD = 60;
 
 const BADGE_LABEL: Record<string, string> = {
   trio: "insigne Trio",
@@ -210,8 +225,14 @@ export function useGame({
   const map = MAPS[game.map];
 
   const npcs = useMemo<NpcSpec[]>(
-    // Le légendaire de la grotte quitte les lieux une fois l'affaire réglée.
-    () => map.npcs.filter((n) => !n.mon || !hasFlag(game, `battu:${n.id}`)),
+    () =>
+      map.npcs.filter(
+        (n) =>
+          // Certains n'apparaissent qu'une fois la Ligue tombée…
+          (n.needs ?? []).every((flag) => hasFlag(game, flag)) &&
+          // …et un légendaire quitte les lieux l'affaire réglée.
+          (!n.mon || !hasFlag(game, `battu:${n.id}`)),
+      ),
     [map, game],
   );
 
@@ -250,6 +271,23 @@ export function useGame({
         });
         return;
       }
+      // Champion : les vaincus d'hier redemandent du service, en plus fort.
+      if (
+        npc.trainer &&
+        hasFlag(game, "insigne:ligue") &&
+        !hasFlag(game, `revanche:${npc.id}`)
+      ) {
+        setPhase({
+          kind: "text",
+          lines: [
+            `${npc.trainer.name} vous barre la route, un sourire aux lèvres.`,
+            "« On m'a dit que tu avais battu Eren. Voyons voir ça. »",
+          ],
+          i: 0,
+          then: { do: "revanche", npc: npc.id },
+        });
+        return;
+      }
       if (npc.starter) {
         if (!hasFlag(game, "starter")) {
           setPhase({
@@ -262,12 +300,30 @@ export function useGame({
             i: 0,
             then: { do: "starter" },
           });
+        } else if (game.caught.length >= DEX_REWARD && !hasFlag(game, "master")) {
+          setGame((g) => ({
+            ...withFlag(g, "master"),
+            bag: { ...g.bag, masterball: countOf(g.bag, "masterball") + 1 },
+          }));
+          setPhase({
+            kind: "text",
+            lines: [
+              `${game.caught.length} espèces enregistrées ! C'est du travail de chercheur.`,
+              "Tiens, prends ceci. Je n'en avais qu'une.",
+              "Vous obtenez une Master Ball !",
+              "Elle ne rate jamais. Choisis bien sur qui tu la lances.",
+            ],
+            i: 0,
+            then: null,
+          });
         } else {
           setPhase({
             kind: "text",
             lines: [
               "Alors, comment se porte ton Pokémon ?",
-              "Les hautes herbes au nord regorgent d'espèces à étudier. Bonne route !",
+              game.caught.length >= DEX_REWARD
+                ? "Ton Pokédex fait plaisir à voir."
+                : `${game.caught.length} espèces sur les ${DEX_REWARD} qu'il me faudrait. Continue !`,
             ],
             i: 0,
             then: null,
@@ -373,10 +429,13 @@ export function useGame({
   );
 
   const startTrainerBattle = useCallback(
-    (npcId: string) => {
+    (npcId: string, revanche = false) => {
       const npc = npcById(npcId);
       if (!npc?.trainer) return;
-      const team = npc.trainer.team.map((t) => createMon(t.id, t.level));
+      const boost = revanche ? REMATCH_BOOST : 0;
+      const team = npc.trainer.team.map((t) =>
+        createMon(t.id, Math.min(MAX_LEVEL, t.level + boost)),
+      );
       // À l'Arène, l'as de la Championne répond au starter du joueur.
       if (npc.trainer.mirror && team.length) {
         const last = team[team.length - 1];
@@ -385,7 +444,8 @@ export function useGame({
       const state = startTrainer(game.party, team, {
         name: npc.trainer.name,
         title: npc.trainer.title,
-        reward: npc.trainer.reward,
+        // Une revanche paie le double : ils reviennent nettement plus forts.
+        reward: npc.trainer.reward * (revanche ? 2 : 1),
       }, game.bag);
       openBattle(
         state,
@@ -394,7 +454,7 @@ export function useGame({
           `${npc.trainer.name} envoie ${state.foe.name} !`,
           `En avant, ${activeMon(state).name} !`,
         ],
-        { kind: "dresseur", npc: npcId },
+        { kind: "dresseur", npc: npcId, revanche },
       );
     },
     [game, npcById, openBattle],
@@ -437,6 +497,7 @@ export function useGame({
       if (s.outcome === "victoire" && ui.origin.kind === "dresseur") {
         const npc = npcById(ui.origin.npc);
         next = withFlag(next, `battu:${ui.origin.npc}`);
+        if (ui.origin.revanche) next = withFlag(next, `revanche:${ui.origin.npc}`);
         next = { ...next, money: next.money + (s.trainer?.reward ?? 0) };
         if (npc?.trainer) {
           lines.push(...npc.trainer.defeat, ...npc.trainer.after);
@@ -552,7 +613,18 @@ export function useGame({
         }
       }
 
-      if (tileChar(current, x, y) === "," && game.party.some((m) => !isKo(m))) {
+      const dispo = game.party.some((m) => !isKo(m));
+
+      // En mer, la faune est la même partout : les espèces d'eau du Pokédex.
+      if (game.surfing && isWater(current, x, y) && dispo) {
+        if (Math.random() < ENCOUNTER_RATE) {
+          const roll = rollWaterEncounter();
+          startWildBattle(roll.id, roll.level);
+        }
+        return;
+      }
+
+      if (tileChar(current, x, y) === "," && dispo) {
         if (Math.random() < ENCOUNTER_RATE) {
           const roll = rollEncounter(current);
           if (roll) startWildBattle(roll.id, roll.level);
@@ -589,6 +661,46 @@ export function useGame({
       }
       setCursor(0);
       setPhase({ kind: "bus" });
+      return;
+    }
+
+    // L'eau devant soi : on embarque, si l'on sait surfer et qu'on a de
+    // quoi porter. À l'inverse, depuis l'eau, on regagne la terre ferme.
+    if (isWater(map, tx, ty) && !game.surfing) {
+      const porteur = game.party.find((m) => !isKo(m));
+      if (!canSurf(game)) {
+        setPhase({
+          kind: "text",
+          lines: [
+            "L'eau est profonde et le courant vif.",
+            "Sans l'insigne Roc, personne ne s'y aventure.",
+          ],
+          i: 0,
+          then: null,
+        });
+        return;
+      }
+      if (!porteur) {
+        setPhase({
+          kind: "text",
+          lines: ["Aucun Pokémon en état de vous porter."],
+          i: 0,
+          then: null,
+        });
+        return;
+      }
+      setGame((g) => ({ ...g, surfing: true, riding: false }));
+      setPhase({
+        kind: "text",
+        lines: [`${porteur.name} vous prend sur son dos !`],
+        i: 0,
+        then: null,
+      });
+      return;
+    }
+    if (game.surfing && !isWater(map, tx, ty) && tileAt(map, tx, ty) && !tileAt(map, tx, ty)!.solid) {
+      setGame((g) => ({ ...g, surfing: false }));
+      setPhase({ kind: "text", lines: ["Vous regagnez la terre ferme."], i: 0, then: null });
       return;
     }
 
@@ -697,6 +809,9 @@ export function useGame({
           break;
         case "statique":
           startStaticBattle(then.npc);
+          break;
+        case "revanche":
+          startTrainerBattle(then.npc, true);
           break;
         case "trainer":
           startTrainerBattle(then.npc);
@@ -825,6 +940,7 @@ export function useGame({
 
   /** Monter ou descendre du vélo : impossible à l'intérieur. */
   const toggleBike = useCallback(() => {
+    if (game.surfing) return;
     if (!game.bike) return;
     if (!game.riding && MAPS[game.map].indoor) {
       setPhase({
@@ -1636,6 +1752,7 @@ export function useGame({
           held={held}
           paused={phase.kind !== "world"}
           riding={game.riding}
+          surfing={game.surfing}
           follower={walker}
           onStep={onStep}
         />

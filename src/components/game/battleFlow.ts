@@ -40,7 +40,10 @@ export type BattleUi = {
   /** Objet choisi au sac, en attente de sa cible. */
   item?: ItemId;
   /** `npc` n'est renseigné que pour un Pokémon posté sur la carte. */
-  origin: { kind: "sauvage"; npc?: string } | { kind: "dresseur"; npc: string };
+  origin:
+    | { kind: "sauvage"; npc?: string }
+    // `revanche` distingue le second duel : il ne se rejoue pas une fois gagné.
+    | { kind: "dresseur"; npc: string; revanche?: boolean };
 };
 
 /** Le premier remplaçant en état de se battre. */

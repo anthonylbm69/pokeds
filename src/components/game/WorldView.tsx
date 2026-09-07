@@ -54,6 +54,8 @@ type Props = {
   paused: boolean;
   /** En selle : deux fois plus rapide qu'à pied, et le vélo se dessine. */
   riding: boolean;
+  /** Sur l'eau : les vagues deviennent praticables, la terre ferme aussi. */
+  surfing: boolean;
   /** Le Pokémon de tête, quand le joueur le laisse sortir. */
   follower: { id: number; shiny: boolean } | null;
   onStep: (x: number, y: number) => void;
@@ -76,15 +78,16 @@ export default function WorldView({
   held,
   paused,
   riding,
+  surfing,
   follower,
   onStep,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // La boucle d'animation lit toujours les dernières valeurs sans redémarrer.
-  const latest = useRef({ mapId, npcs, paused, riding, follower, onStep });
+  const latest = useRef({ mapId, npcs, paused, riding, surfing, follower, onStep });
   useEffect(() => {
-    latest.current = { mapId, npcs, paused, riding, follower, onStep };
+    latest.current = { mapId, npcs, paused, riding, surfing, follower, onStep };
   });
 
   useEffect(() => {
@@ -104,7 +107,7 @@ export default function WorldView({
       const map = MAPS[latest.current.mapId];
       const buttons = held.current ?? new Set<DsButton>();
 
-      const pace = latest.current.riding
+      const pace = latest.current.riding || latest.current.surfing
         ? BIKE_MS
         : buttons.has("b")
           ? RUN_MS
@@ -151,7 +154,7 @@ export default function WorldView({
       }
 
       const { dx, dy } = STEP[dir];
-      if (walkable(map, p.x + dx, p.y + dy, latest.current.npcs)) {
+      if (walkable(map, p.x + dx, p.y + dy, latest.current.npcs, latest.current.surfing)) {
         p.moving = true;
         p.progress = 0;
         p.frame = p.frame === 1 ? 2 : 1;
@@ -222,7 +225,16 @@ export default function WorldView({
         });
       }
       const mon = latest.current.follower;
-      if (mon) {
+      if (mon && latest.current.surfing) {
+        // Il ne suit plus : il porte. On le pose sous le héros.
+        actors.push({
+          y: p.y,
+          paint: () => {
+            const face = pixelUrl(mon.id, mon.shiny);
+            drawMon(ctx, face, face, px - camX, py - camY, 0);
+          },
+        });
+      } else if (mon) {
         const spot = followerSpot(p);
         // Empilé sur le joueur, il passe dessous : on le range juste avant.
         actors.push({

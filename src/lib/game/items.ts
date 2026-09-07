@@ -13,7 +13,8 @@ export type ItemId =
   | "superpotion"
   | "hyperpotion"
   | "rappel"
-  | "totalsoin";
+  | "totalsoin"
+  | "masterball";
 
 export type ItemKind = "ball" | "soin" | "rappel" | "statut";
 
@@ -38,9 +39,14 @@ export const ITEMS: Record<ItemId, Item> = {
   hyperpotion: { name: "Hyper Potion", price: 1200, kind: "soin", heal: 200 },
   rappel: { name: "Rappel", price: 1500, kind: "rappel", share: 0.5 },
   totalsoin: { name: "Total Soin", price: 600, kind: "statut" },
+  // Ne se vend pas : le Professeur la remet pour un Pokédex bien rempli.
+  masterball: { name: "Master Ball", price: 0, kind: "ball", bonus: 255 },
 };
 
 /** L'ordre des rayons et du sac : du plus courant au plus rare. */
+/** Ce que la boutique tient en rayon : tout, sauf ce qui ne s'achète pas. */
+export const SHOP_STOCK: ItemId[] = [];
+
 export const ITEM_ORDER: ItemId[] = [
   "ball",
   "superball",
@@ -50,13 +56,18 @@ export const ITEM_ORDER: ItemId[] = [
   "hyperpotion",
   "rappel",
   "totalsoin",
+  "masterball",
 ];
+
+// Rempli une fois la liste connue : seuls les objets à prix non nul.
+SHOP_STOCK.push(...ITEM_ORDER.filter((id) => ITEMS[id].price > 0));
 
 export type Bag = Record<ItemId, number>;
 
 export const emptyBag = (): Bag => ({
   ball: 0, superball: 0, hyperball: 0,
   potion: 0, superpotion: 0, hyperpotion: 0, rappel: 0, totalsoin: 0,
+  masterball: 0,
 });
 
 /** Un sac neuf : de quoi tenir jusqu'à la première boutique. */
