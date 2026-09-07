@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MOVES, SPECIES, species } from "./data";
 import { createMon, maxHp } from "./battle";
-import { emptyBag } from "./items";
+import { CT_MOVES, ITEMS, SHOP_STOCK, ctId, emptyBag, isCT, needsTarget } from "./items";
 import {
   DREAM_LEVEL,
   STARTERS,
@@ -13,6 +13,7 @@ import {
   addCaught,
   applyItem,
   followerLine,
+  teachMove,
   depositMon,
   leadMon,
   withdrawMon,
@@ -255,5 +256,86 @@ describe("les répliques du suiveur", () => {
   it("changent de ton selon le type", () => {
     // Un Feu et un Eau ne disent pas la même chose en pleine forme.
     expect(followerLine(solide(498))[0]).not.toBe(followerLine(solide(501))[0]);
+  });
+});
+
+describe("les Capsules Techniques", () => {
+  const avec = (moves: string[], potions = 0) => {
+    const mon = createMon(495, 40, false);
+    mon.moves = moves.map((id) => ({ id: id as never, pp: 10, max: 10 }));
+    return { ...newGame("Test"), party: [mon], bag: { ...emptyBag(), potion: potions } };
+  };
+  const ct = ctId("lance-flammes");
+
+  it("apprennent une attaque quand il reste de la place", () => {
+    const avant = { ...avec(["charge"]), bag: { ...emptyBag(), [ct]: 1 } };
+    const { state, message } = teachMove(avant, ct, 0, -1);
+    expect(state.party[0].moves.map((m) => m.id)).toContain("lance-flammes");
+    expect(message).toContain("apprend");
+    // La Capsule se consomme.
+    expect(state.bag[ct]).toBe(0);
+  });
+
+  it("remplacent celle que l'on désigne, et elle seule", () => {
+    const avant = {
+      ...avec(["charge", "griffe", "morsure", "picpic"]),
+      bag: { ...emptyBag(), [ct]: 1 },
+    };
+    const { state, message } = teachMove(avant, ct, 0, 2);
+    const ids = state.party[0].moves.map((m) => m.id);
+    expect(ids).toEqual(["charge", "griffe", "lance-flammes", "picpic"]);
+    expect(message).toContain("oublie");
+    expect(message).toContain("Morsure");
+  });
+
+  it("refusent d'écraser au hasard quand les quatre sont prises", () => {
+    const avant = {
+      ...avec(["charge", "griffe", "morsure", "picpic"]),
+      bag: { ...emptyBag(), [ct]: 1 },
+    };
+    const { state, message } = teachMove(avant, ct, 0, -1);
+    expect(state).toBe(avant);
+    expect(message).toContain("oublier");
+  });
+
+  it("ne se gaspillent pas sur qui connaît déjà l'attaque", () => {
+    const avant = {
+      ...avec(["lance-flammes"]),
+      bag: { ...emptyBag(), [ct]: 1 },
+    };
+    const { state, message } = teachMove(avant, ct, 0, -1);
+    expect(state).toBe(avant);
+    expect(message).toContain("connaît déjà");
+  });
+
+  it("refusent sans Capsule en poche, ou sur un rang absent", () => {
+    const sans = avec(["charge"]);
+    expect(teachMove(sans, ct, 0, -1).state).toBe(sans);
+
+    const avecCt = { ...avec(["charge"]), bag: { ...emptyBag(), [ct]: 1 } };
+    expect(teachMove(avecCt, ct, 9, -1).state).toBe(avecCt);
+  });
+
+  it("ne s'appliquent qu'aux vraies Capsules", () => {
+    const avant = { ...avec(["charge"]), bag: { ...emptyBag(), potion: 1 } };
+    expect(teachMove(avant, "potion", 0, -1).message).toContain("pas une Capsule");
+  });
+
+  it("figurent au rayon, à un prix qui suit leur puissance", () => {
+    expect(SHOP_STOCK).toContain(ct);
+    expect(ITEMS[ct].teaches).toBe("lance-flammes");
+    expect(ITEMS[ct].price).toBeGreaterThan(ITEMS.potion.price);
+    // Une Capsule ne se pose pas sur un Pokémon comme un soin.
+    expect(needsTarget(ct)).toBe(false);
+    expect(isCT(ct)).toBe(true);
+    expect(isCT("potion")).toBe(false);
+  });
+
+  it("n'enseignent que des attaques du catalogue", () => {
+    for (const move of CT_MOVES) {
+      expect(MOVES[move], `${move} inconnue`).toBeDefined();
+      expect(ITEMS[ctId(move)].name).toContain(MOVES[move].name);
+    }
+    expect(new Set(CT_MOVES).size).toBe(CT_MOVES.length);
   });
 });

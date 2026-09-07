@@ -22,6 +22,7 @@ import {
   type MapId,
   type NpcSpec,
 } from "@/lib/game/world";
+import { TINT, momentNow } from "@/lib/game/heure";
 import type { DsButton } from "../DSConsole";
 
 export type PlayerPos = {
@@ -61,6 +62,37 @@ type Props = {
   onStep: (x: number, y: number) => void;
 };
 
+/** Comment dire une direction et un décor, pour qui ne voit pas l'écran. */
+const DIR_FR: Record<Dir, string> = {
+  up: "le nord",
+  down: "le sud",
+  left: "l'ouest",
+  right: "l'est",
+};
+
+const TILE_FR: Partial<Record<string, string>> = {
+  grass: "de l'herbe",
+  tall: "de hautes herbes",
+  path: "un chemin",
+  flower: "des fleurs",
+  tree: "un arbre",
+  water: "de l'eau",
+  wall: "un mur",
+  inwall: "une paroi",
+  roof: "un toit",
+  door: "une porte",
+  floor: "un sol",
+  counter: "un comptoir",
+  furniture: "un meuble",
+  sign: "un panneau",
+  arena: "le terrain de l'Arène",
+  stands: "des gradins",
+  bus: "un arrêt des Cars Faure",
+  pc: "le PC du Centre",
+  roche: "de la roche",
+  caillou: "un sol de pierre",
+};
+
 const VIEW_W = 512;
 const VIEW_H = 384;
 const WALK_MS = 210;
@@ -84,6 +116,13 @@ export default function WorldView({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  /**
+   * Ce qu'il y a autour de soi, en toutes lettres. Le texte est écrit
+   * directement dans le DOM depuis la boucle de rendu — un lecteur d'écran
+   * est un système extérieur, et cela évite un rendu React par pas.
+   */
+  const srRef = useRef<HTMLParagraphElement>(null);
+
   // La boucle d'animation lit toujours les dernières valeurs sans redémarrer.
   const latest = useRef({ mapId, npcs, paused, riding, surfing, follower, onStep });
   useEffect(() => {
@@ -100,6 +139,8 @@ export default function WorldView({
     let raf = 0;
     let last = performance.now();
     let elapsed = 0;
+    // Une première annonce dès l'entrée sur la carte.
+    const premiere = setTimeout(() => annonce(), 0);
 
     const update = (dt: number) => {
       const p = player.current;
@@ -124,6 +165,7 @@ export default function WorldView({
         p.y += dy;
         p.progress = 0;
         p.moving = false;
+        annonce();
         latest.current.onStep(p.x, p.y);
         return;
       }
@@ -146,6 +188,7 @@ export default function WorldView({
       if (p.dir !== dir) {
         p.dir = dir;
         p.turnDelay = TURN_MS;
+        annonce();
         return;
       }
       if (p.turnDelay > 0) {
@@ -159,6 +202,30 @@ export default function WorldView({
         p.progress = 0;
         p.frame = p.frame === 1 ? 2 : 1;
       }
+    };
+
+    /** Décrit la case regardée, et ne réécrit que si cela a changé. */
+    const annonce = () => {
+      const p = player.current;
+      const cible = srRef.current;
+      if (!p || !cible) return;
+      const map = MAPS[latest.current.mapId];
+      const { dx, dy } = STEP[p.dir];
+      const tile = TILES[tileChar(map, p.x + dx, p.y + dy)];
+      const npc = latest.current.npcs.find((n) => n.x === p.x + dx && n.y === p.y + dy);
+      const devant = npc?.trainer
+        ? `${npc.trainer.title} ${npc.trainer.name} vous fait face.`
+        : npc?.mon
+          ? "Un Pokémon vous barre le passage."
+          : npc
+            ? "Quelqu'un vous fait face."
+            : tile
+              ? `Devant vous : ${TILE_FR[tile.kind] ?? tile.kind}.`
+              : "Devant vous : le bord de la carte.";
+      const texte =
+        `${map.name}. Case ${p.x}, ${p.y}. Vous regardez vers ${DIR_FR[p.dir]}. ` +
+        `${devant}${latest.current.surfing ? " Vous nagez." : ""}`;
+      if (cible.textContent !== texte) cible.textContent = texte;
     };
 
     const draw = () => {
@@ -264,6 +331,19 @@ export default function WorldView({
       });
       actors.sort((a, b) => a.y - b.y).forEach((a) => a.paint());
 
+      // Le voile du soir ou de la nuit, posé sur la scène entière. Les
+      // intérieurs y échappent : on y voit clair à toute heure.
+      if (!map.indoor) {
+        const voile = TINT[momentNow()];
+        if (voile.alpha > 0) {
+          ctx.save();
+          ctx.globalAlpha = voile.alpha;
+          ctx.fillStyle = voile.color;
+          ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+          ctx.restore();
+        }
+      }
+
       // Les hautes herbes repassent devant les jambes : on y est vraiment.
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
@@ -290,16 +370,24 @@ export default function WorldView({
     };
 
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      clearTimeout(premiere);
+      cancelAnimationFrame(raf);
+    };
   }, [held, player]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="world"
-      width={VIEW_W}
-      height={VIEW_H}
-      aria-label={`Carte : ${MAPS[mapId].name}`}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="world"
+        width={VIEW_W}
+        height={VIEW_H}
+        // Le dessin ne dit rien à un lecteur d'écran : la description vit
+        // dans le paragraphe qui suit, tenu à jour à chaque pas.
+        aria-hidden="true"
+      />
+      <p ref={srRef} className="sr-only" role="status" aria-live="polite" />
+    </>
   );
 }

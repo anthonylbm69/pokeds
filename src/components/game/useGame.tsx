@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
+import { MOMENT_FR, atNight, momentNow } from "@/lib/game/heure";
 import {
   MAX_LEVEL,
   MOVES,
@@ -15,6 +16,7 @@ import {
   ITEM_ORDER,
   SHOP_STOCK,
   countOf,
+  ctMove,
   effectOn,
   type ItemId,
 } from "@/lib/game/items";
@@ -62,13 +64,17 @@ import {
   loadGame,
   markSeen,
   newGame,
+  BOX_ORDER_FR,
   leadMon,
   saveGame,
+  sortedBox,
   applyItem,
+  teachMove,
   withDreamTeam,
   withdrawMon,
   withFlag,
   DREAM_LEVEL,
+  type BoxOrder,
   type GameState,
 } from "@/lib/game/state";
 import { abilityName, abilityWorks, natureName } from "@/lib/game/traits";
@@ -117,11 +123,19 @@ type Phase =
   | { kind: "bus" }
   | { kind: "voyage"; to: MapId; label: string }
   | { kind: "shop"; counter: Counter; message: string | null }
-  | { kind: "sac"; on: "objets" | "cible"; item?: ItemId; message: string | null }
+  | {
+      kind: "sac";
+      on: "objets" | "cible" | "oubli";
+      item?: ItemId;
+      /** Pokémon choisi, quand une Capsule attend qu'on lui fasse de la place. */
+      cible?: number;
+      message: string | null;
+    }
   | { kind: "equipe" }
   | { kind: "fiche"; index: number }
   | { kind: "surnom"; mon: Mon }
   | { kind: "pc"; on: "menu" | "retirer" | "deposer" | "ordre"; message: string | null }
+  | { kind: "tri" }
   | { kind: "battle"; ui: BattleUi };
 
 /** Les rayons, aux prix d'Unys. */
@@ -556,6 +570,14 @@ export function useGame({
 
   const runTurn = useCallback(
     (ui: BattleUi, turn: { state: BattleState; messages: string[] }, throwing = false) => {
+      // Le bruitage suit ce que le tour a produit, dans l'ordre d'importance.
+      const dit = turn.messages.join(" ");
+      if (throwing) music.sfx("ball");
+      else if (turn.state.outcome === "capture") music.sfx("capture");
+      else if (dit.includes("K.O.")) music.sfx("ko");
+      else if (dit.includes("super efficace")) music.sfx("efficace");
+      else if (dit.includes("récupère") || dit.includes("altération")) music.sfx("soin");
+      else if (dit.includes("utilise")) music.sfx("coup");
       setCursor(0);
       setPhase({
         kind: "battle",
@@ -627,7 +649,8 @@ export function useGame({
       if (tileChar(current, x, y) === "," && dispo) {
         if (Math.random() < ENCOUNTER_RATE) {
           const roll = rollEncounter(current);
-          if (roll) startWildBattle(roll.id, roll.level);
+          // La nuit fait sortir d'autres bestioles que le plein jour.
+          if (roll) startWildBattle(atNight(roll.id, momentNow()), roll.level);
         }
       }
     },
@@ -1076,8 +1099,56 @@ export function useGame({
 
     if (phase.kind === "sac") {
       const back = { id: "back", label: "RETOUR", tone: "back" as const };
+      if (phase.on === "oubli") {
+        const item = phase.item ?? "potion";
+        const mon = game.party[phase.cible ?? 0];
+        const move = ctMove(item);
+        return {
+          title: `Quelle attaque oublier ?`,
+          hint: `${mon?.name ?? ""} en connaît déjà quatre · B pour renoncer`,
+          layout: "list",
+          list: [
+            ...(mon?.moves ?? []).map((m, i) => ({
+              id: `oubli:${i}`,
+              label: MOVES[m.id].name,
+              sub: `${TYPE_FR[MOVES[m.id].type]} · ${
+                MOVES[m.id].power ? `puissance ${MOVES[m.id].power}` : "statut"
+              } · PP ${m.pp}/${m.max}`,
+              tone: "fight" as const,
+            })),
+            {
+              id: "back",
+              label: `RENONCER À ${move ? MOVES[move].name.toUpperCase() : "LA CT"}`,
+              tone: "back" as const,
+            },
+          ],
+        };
+      }
+
       if (phase.on === "cible") {
         const item = phase.item ?? "potion";
+        const move = ctMove(item);
+        // Une Capsule ne soigne pas : elle enseigne, et tout le monde peut
+        // l'apprendre sauf celui qui connaît déjà l'attaque.
+        if (move) {
+          return {
+            title: `${MOVES[move].name} — à qui ?`,
+            hint: "▲ ▼ pour choisir · A pour enseigner · B pour revenir",
+            layout: "list",
+            list: [
+              ...game.party.map((mon, i) => ({
+                id: `mon:${i}`,
+                ...monLine(mon),
+                sub: mon.moves.some((m) => m.id === move)
+                  ? "la connaît déjà"
+                  : `${mon.moves.length}/4 attaques`,
+                disabled: mon.moves.some((m) => m.id === move),
+                tone: "party" as const,
+              })),
+              back,
+            ],
+          };
+        }
         return {
           title: `${ITEMS[item].name} sur qui ?`,
           hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
@@ -1119,13 +1190,13 @@ export function useGame({
       const back = { id: "back", label: "RETOUR", tone: "back" as const };
       if (phase.on === "retirer") {
         return {
-          title: "Retirer du PC",
-          hint: "▲ ▼ pour choisir · A pour reprendre · B pour revenir",
+          title: `Retirer du PC — ${BOX_ORDER_FR[game.boxOrder]}`,
+          hint: "▲ ▼ pour choisir · A pour reprendre · Y pour trier · B pour revenir",
           layout: "list",
           list: [
-            ...game.box.map((mon, i) => ({
+            ...sortedBox(game.box, game.boxOrder).map((i) => ({
               id: `box:${i}`,
-              ...monLine(mon),
+              ...monLine(game.box[i]),
               disabled: game.party.length >= PARTY_MAX,
               tone: "party" as const,
             })),
@@ -1155,6 +1226,13 @@ export function useGame({
         hint: "▲ ▼ pour choisir · A pour valider · B pour fermer",
         layout: "list",
         list: [
+          {
+            id: "trier",
+            label: "TRIER",
+            sub: BOX_ORDER_FR[game.boxOrder],
+            disabled: game.box.length < 2,
+            tone: "plain" as const,
+          },
           {
             id: "retirer",
             label: "RETIRER",
@@ -1266,6 +1344,23 @@ export function useGame({
       };
     }
 
+    if (phase.kind === "tri") {
+      return {
+        title: "Ranger le PC",
+        hint: "▲ ▼ pour choisir · A pour valider · B pour revenir",
+        layout: "list",
+        list: [
+          ...(Object.keys(BOX_ORDER_FR) as BoxOrder[]).map((id) => ({
+            id: `tri:${id}`,
+            label: BOX_ORDER_FR[id].toUpperCase(),
+            sub: id === game.boxOrder ? "en cours" : "",
+            tone: "party" as const,
+          })),
+          { id: "back", label: "RETOUR", tone: "back" as const },
+        ],
+      };
+    }
+
     if (phase.kind === "name") {
       return {
         title: "Ton nom",
@@ -1299,7 +1394,7 @@ export function useGame({
           sub: game.party.length ? `${game.party.length} Pokémon` : "—",
           disabled: !game.party.length,
         },
-        { id: "carte", label: "CARTE", sub: "START" },
+        { id: "carte", label: "CARTE", sub: MOMENT_FR[momentNow()] },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X" },
         { id: "music", label: "MUSIQUE", sub: game.music ? "activée" : "coupée" },
@@ -1319,6 +1414,8 @@ export function useGame({
   const pick = useCallback(
     (index: number) => {
       const choice = choices.list[index];
+      // Un refus se distingue à l'oreille d'une validation.
+      music.sfx(!choice || choice.disabled ? "refus" : "valider");
 
       if (phase.kind === "starter") {
         chooseStarter(index);
@@ -1367,6 +1464,15 @@ export function useGame({
         return;
       }
 
+      if (phase.kind === "tri") {
+        if (choice.id !== "back") {
+          setGame((g) => ({ ...g, boxOrder: choice.id.split(":")[1] as BoxOrder }));
+        }
+        setCursor(0);
+        setPhase({ kind: "pc", on: "menu", message: null });
+        return;
+      }
+
       if (phase.kind === "equipe") {
         if (choice.id === "leave") {
           setPhase({ kind: "world" });
@@ -1398,7 +1504,34 @@ export function useGame({
           setPhase({ kind: "sac", on: "cible", item: choice.id as ItemId, message: null });
           return;
         }
-        const soin = applyItem(game, phase.item ?? "potion", Number(choice.id.split(":")[1]));
+
+        const item = phase.item ?? "potion";
+        const move = ctMove(item);
+
+        if (phase.on === "oubli") {
+          const appris = teachMove(game, item, phase.cible ?? 0, Number(choice.id.split(":")[1]));
+          setGame(appris.state);
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", message: appris.message });
+          return;
+        }
+
+        if (move) {
+          const cible = Number(choice.id.split(":")[1]);
+          // Quatre attaques déjà : il faut en céder une.
+          if (game.party[cible].moves.length >= 4) {
+            setCursor(0);
+            setPhase({ kind: "sac", on: "oubli", item, cible, message: null });
+            return;
+          }
+          const appris = teachMove(game, item, cible, -1);
+          setGame(appris.state);
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", message: appris.message });
+          return;
+        }
+
+        const soin = applyItem(game, item, Number(choice.id.split(":")[1]));
         setGame(soin.state);
         setCursor(0);
         setPhase({ kind: "sac", on: "objets", message: soin.message });
@@ -1417,6 +1550,10 @@ export function useGame({
         }
         if (phase.on === "menu") {
           setCursor(0);
+          if (choice.id === "trier") {
+            setPhase({ kind: "tri" });
+            return;
+          }
           setPhase({
             kind: "pc",
             on: choice.id as "retirer" | "deposer" | "ordre",
@@ -1500,6 +1637,7 @@ export function useGame({
     (dx: number, dy: number) => {
       const count = choices.list.length;
       if (!count) return;
+      music.sfx("choix");
       const step = choices.layout === "grid" ? dx + dy * 2 : choices.layout === "list" ? dy : dx;
       if (!step) return;
       setCursor((c) => Math.min(Math.max(c + step, 0), count - 1));
@@ -1554,6 +1692,16 @@ export function useGame({
           else if (button === "down") moveCursor(0, 1);
           else if (button === "a") pick(cursor);
           else if (button === "b") setPhase({ kind: "world" });
+          return;
+
+        case "tri":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") {
+            setCursor(0);
+            setPhase({ kind: "pc", on: "menu", message: null });
+          }
           return;
 
         case "equipe":
@@ -1810,6 +1958,7 @@ export function useGame({
       phase.kind === "sac" ||
       phase.kind === "pc" ||
       phase.kind === "equipe" ||
+      phase.kind === "tri" ||
       phase.kind === "fiche" ||
       phase.kind === "surnom" ||
       phase.kind === "bus" ||

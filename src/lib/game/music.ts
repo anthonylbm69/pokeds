@@ -270,6 +270,25 @@ export function trackForMap(map: string): TrackId {
   return map.startsWith("route") ? "route" : "ville";
 }
 
+/**
+ * Les bruitages : quelques notes chacun, assez courts pour ne pas gêner le
+ * défilement du texte.
+ */
+export const SFX = {
+  choix: { notes: ["E5"], step: 0.06, wave: "square" as OscillatorType, gain: 0.1 },
+  valider: { notes: ["E5", "B5"], step: 0.06, wave: "square" as OscillatorType, gain: 0.12 },
+  refus: { notes: ["A3"], step: 0.12, wave: "square" as OscillatorType, gain: 0.12 },
+  coup: { notes: ["G2", "C3"], step: 0.05, wave: "sawtooth" as OscillatorType, gain: 0.14 },
+  efficace: { notes: ["C4", "G4", "C5"], step: 0.05, wave: "sawtooth" as OscillatorType, gain: 0.15 },
+  ko: { notes: ["G3", "E3", "C3"], step: 0.1, wave: "triangle" as OscillatorType, gain: 0.14 },
+  ball: { notes: ["C5", "G4"], step: 0.07, wave: "triangle" as OscillatorType, gain: 0.12 },
+  capture: { notes: ["C5", "E5", "G5", "C6"], step: 0.09, wave: "square" as OscillatorType, gain: 0.14 },
+  soin: { notes: ["C5", "E5"], step: 0.09, wave: "triangle" as OscillatorType, gain: 0.12 },
+  pas: { notes: ["C3"], step: 0.04, wave: "triangle" as OscillatorType, gain: 0.05 },
+};
+
+export type SfxId = keyof typeof SFX;
+
 type Event = { note: string; len: number; voice: Voice };
 
 /** Range les notes d'une piste par position, pour un ordonnancement direct. */
@@ -330,6 +349,32 @@ class Player {
     // Le navigateur suspend le contexte tant qu'aucun geste n'a eu lieu.
     if (this.ctx.state === "suspended") void this.ctx.resume();
     return this.ctx;
+  }
+
+  /**
+   * Un bruitage court, synthétisé comme la musique : pas de fichier, et il
+   * passe par le même volume principal, donc il se coupe avec elle.
+   */
+  sfx(id: SfxId): void {
+    const ctx = this.ensure();
+    if (!ctx || !this.master || this.muted) return;
+    const son = SFX[id];
+    const debut = ctx.currentTime + 0.005;
+
+    son.notes.forEach((note, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = debut + i * son.step;
+      osc.type = son.wave;
+      osc.frequency.value = frequency(note);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(son.gain, t + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + son.step * 0.9);
+      osc.connect(gain);
+      gain.connect(this.master!);
+      osc.start(t);
+      osc.stop(t + son.step);
+    });
   }
 
   setMuted(muted: boolean): void {

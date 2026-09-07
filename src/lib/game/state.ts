@@ -3,12 +3,12 @@
  * pour que `localStorage` suffise.
  */
 
-import { MOVES, type MoveId } from "./data";
+import { MOVES, species, type MoveId, type TypeName } from "./data";
 import { STATUS_FR, createMon, healMon, maxHp, type Mon } from "./battle";
-import { species, type TypeName } from "./data";
 import {
   ITEMS,
   countOf,
+  ctMove,
   effectOn,
   normaliseBag,
   spend,
@@ -45,6 +45,8 @@ export type GameState = {
   follower: boolean;
   /** Sur l'eau : le joueur avance à dos de Pokémon. */
   surfing: boolean;
+  /** Comment la boîte du PC est rangée à l'affichage. */
+  boxOrder: BoxOrder;
   /** Starter reçu : l'Arène s'en sert pour composer son équipe. */
   starter?: number;
   /** Événements franchis : starter reçu, dresseurs battus… */
@@ -132,6 +134,7 @@ export function newGame(name: string): GameState {
     music: true,
     follower: true,
     surfing: false,
+    boxOrder: "arrivee",
     flags: [],
     seen: [],
     caught: [],
@@ -234,6 +237,52 @@ export const SURF_BADGE = "roc";
 
 export const canSurf = (state: GameState) => hasFlag(state, `insigne:${SURF_BADGE}`);
 
+/**
+ * Enseigne l'attaque d'une Capsule au Pokémon désigné. `oubli` dit quelle
+ * attaque céder la place quand les quatre emplacements sont pris ; il vaut
+ * -1 quand il reste de la place.
+ *
+ * La Capsule se consomme, comme en Génération V — elle ne resservira pas.
+ */
+export function teachMove(
+  state: GameState,
+  item: ItemId,
+  index: number,
+  oubli: number,
+): { state: GameState; message: string } {
+  const move = ctMove(item);
+  const mon = state.party[index];
+  if (!move) return { state, message: "Ce n'est pas une Capsule." };
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
+  if (!mon) return { state, message: "Aucun Pokémon à qui l'enseigner." };
+  if (mon.moves.some((m) => m.id === move)) {
+    return { state, message: `${mon.name} connaît déjà ${MOVES[move].name}.` };
+  }
+
+  const neuf = { id: move, pp: MOVES[move].pp, max: MOVES[move].pp };
+  const complet = mon.moves.length >= 4;
+  if (complet && (oubli < 0 || oubli >= mon.moves.length)) {
+    return { state, message: "Il faut choisir une attaque à oublier." };
+  }
+  const oubliee = complet ? MOVES[mon.moves[oubli].id].name : null;
+  const moves = complet
+    ? mon.moves.map((m, i) => (i === oubli ? neuf : m))
+    : [...mon.moves, neuf];
+
+  return {
+    state: {
+      ...state,
+      bag: spend(state.bag, item),
+      party: state.party.map((m, i) => (i === index ? { ...m, moves } : m)),
+    },
+    message: oubliee
+      ? `${mon.name} oublie ${oubliee} et apprend ${MOVES[move].name} !`
+      : `${mon.name} apprend ${MOVES[move].name} !`,
+  };
+}
+
 /* -------------------------------------------------------------------- PC */
 
 /**
@@ -249,6 +298,32 @@ export function depositMon(state: GameState, index: number): GameState {
     party: state.party.filter((_, i) => i !== index),
     box: [...state.box, healMon(mon)],
   };
+}
+
+/** Les façons de ranger le PC. Le rang d'origine reste la valeur par défaut. */
+export type BoxOrder = "arrivee" | "numero" | "niveau" | "nom";
+
+export const BOX_ORDER_FR: Record<BoxOrder, string> = {
+  arrivee: "ordre d'arrivée",
+  numero: "numéro du Pokédex",
+  niveau: "niveau, du plus fort",
+  nom: "nom, de A à Z",
+};
+
+/**
+ * Range la boîte pour l'affichage, sans jamais la modifier : les rangs
+ * rendus pointent vers `state.box`, pour que retirer vise le bon Pokémon.
+ */
+export function sortedBox(box: Mon[], order: BoxOrder): number[] {
+  const rangs = box.map((_, i) => i);
+  if (order === "arrivee") return rangs;
+  return rangs.sort((a, b) => {
+    const x = box[a];
+    const y = box[b];
+    if (order === "numero") return x.id - y.id || x.name.localeCompare(y.name);
+    if (order === "niveau") return y.level - x.level || x.name.localeCompare(y.name);
+    return x.name.localeCompare(y.name);
+  });
 }
 
 /** Reprend un Pokémon au PC, si l'équipe a encore de la place. */
@@ -342,6 +417,7 @@ export function loadGame(): GameState | null {
       follower: data.follower ?? true,
       // On ne reprend jamais une partie au milieu de l'eau.
       surfing: false,
+      boxOrder: data.boxOrder ?? "arrivee",
       box: (data.box ?? []).map((mon) => ({
         ...mon,
         shiny: mon.shiny ?? false,

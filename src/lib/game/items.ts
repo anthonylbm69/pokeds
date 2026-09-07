@@ -4,6 +4,7 @@
  */
 
 import { maxHp, type Mon } from "./battle";
+import { MOVES, type MoveId } from "./data";
 
 export type ItemId =
   | "ball"
@@ -14,9 +15,10 @@ export type ItemId =
   | "hyperpotion"
   | "rappel"
   | "totalsoin"
-  | "masterball";
+  | "masterball"
+  | `ct-${MoveId}`;
 
-export type ItemKind = "ball" | "soin" | "rappel" | "statut";
+export type ItemKind = "ball" | "soin" | "rappel" | "statut" | "ct";
 
 export type Item = {
   name: string;
@@ -28,9 +30,67 @@ export type Item = {
   heal?: number;
   /** Part des PV maximum rendus à la réanimation. */
   share?: number;
+  /** Attaque enseignée, pour une Capsule Technique. */
+  teaches?: MoveId;
 };
 
+/**
+ * Les Capsules Techniques. Le jeu n'a jamais laissé choisir une attaque :
+ * elles s'écrasaient toutes seules à la montée de niveau. Une CT permet
+ * enfin d'en enseigner une, et de décider laquelle sacrifier.
+ *
+ * Le catalogue est celui des attaques marquantes, pas des coups de départ.
+ */
+export const CT_MOVES: MoveId[] = [
+  "plaquage",
+  "lance-flammes",
+  "hydrocanon",
+  "lame-feuille",
+  "tonnerre-eclair",
+  "psyko",
+  "blizzard",
+  "colere",
+  "dark-lariat",
+  "megasabot",
+  "eboulement",
+  "ultimapoing",
+  "dard-nuee",
+  "eclat-magique",
+  "tete-de-fer",
+  "direct-toxik",
+  "griffe-ombre",
+  "aeropique",
+  "danse-lames",
+  "hate",
+  "cage-eclair",
+  "toxik",
+  "poudre-dodo",
+  "feu-follet",
+];
+
+/** L'identifiant d'objet d'une CT, et l'attaque qu'elle porte. */
+export const ctId = (move: MoveId): ItemId => `ct-${move}` as ItemId;
+export const ctMove = (id: ItemId): MoveId | null =>
+  id.startsWith("ct-") ? (id.slice(3) as MoveId) : null;
+
+/** Prix d'une CT : proportionnel à ce qu'elle apporte. */
+const ctPrice = (move: MoveId) =>
+  Math.max(1500, Math.round((MOVES[move].power || 60) * 40));
+
+const CT_ITEMS = Object.fromEntries(
+  CT_MOVES.map((move) => [
+    ctId(move),
+    {
+      name: `CT · ${MOVES[move].name}`,
+      price: ctPrice(move),
+      kind: "ct" as const,
+      teaches: move,
+    },
+  ]),
+) as Record<ItemId, Item>;
+
 export const ITEMS: Record<ItemId, Item> = {
+  ...CT_ITEMS,
   ball: { name: "Poké Ball", price: 200, kind: "ball", bonus: 1 },
   superball: { name: "Super Ball", price: 600, kind: "ball", bonus: 1.5 },
   hyperball: { name: "Hyper Ball", price: 1200, kind: "ball", bonus: 2 },
@@ -57,6 +117,8 @@ export const ITEM_ORDER: ItemId[] = [
   "rappel",
   "totalsoin",
   "masterball",
+  // Les Capsules ferment la marche : elles sont nombreuses et rares.
+  ...CT_MOVES.map(ctId),
 ];
 
 // Rempli une fois la liste connue : seuls les objets à prix non nul.
@@ -68,7 +130,8 @@ export const emptyBag = (): Bag => ({
   ball: 0, superball: 0, hyperball: 0,
   potion: 0, superpotion: 0, hyperpotion: 0, rappel: 0, totalsoin: 0,
   masterball: 0,
-});
+  ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
+} as Bag);
 
 /** Un sac neuf : de quoi tenir jusqu'à la première boutique. */
 export const startingBag = (): Bag => ({ ...emptyBag(), ball: 5, potion: 3 });
@@ -117,6 +180,7 @@ export function effectOn(
   if (!mon) return { healed: 0, refus: "Aucun Pokémon à soigner." };
 
   const max = maxHp(mon);
+  if (data.kind === "ct") return { healed: 0, refus: null };
   if (data.kind === "statut") {
     if (!mon.status) return { healed: 0, refus: `${mon.name} se porte très bien.` };
     return { healed: 0, refus: null };
@@ -134,4 +198,8 @@ export function effectOn(
 }
 
 /** Un objet qui se pose sur un Pokémon de l'équipe demande une cible. */
-export const needsTarget = (item: ItemId) => ITEMS[item].kind !== "ball";
+export const needsTarget = (item: ItemId) =>
+  ITEMS[item].kind !== "ball" && ITEMS[item].kind !== "ct";
+
+/** Une CT s'enseigne hors combat, et seulement là. */
+export const isCT = (item: ItemId) => ITEMS[item].kind === "ct";
