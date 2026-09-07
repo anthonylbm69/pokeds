@@ -335,6 +335,9 @@ export function loadGame(): GameState | null {
         status: mon.status ?? null,
         sleep: mon.sleep ?? 0,
         confusion: 0,
+        // Une partie d'avant les natures reçoit la neutre : rien ne change
+        // pour un Pokémon déjà élevé.
+        nature: mon.nature ?? 0,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
       starter: data.starter ?? data.party[0]?.id,
@@ -344,6 +347,9 @@ export function loadGame(): GameState | null {
         status: mon.status ?? null,
         sleep: mon.sleep ?? 0,
         confusion: 0,
+        // Une partie d'avant les natures reçoit la neutre : rien ne change
+        // pour un Pokémon déjà élevé.
+        nature: mon.nature ?? 0,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
     };

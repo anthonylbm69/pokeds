@@ -77,6 +77,11 @@ await enParallele([...Array(MAX).keys()].map((i) => i + 1), async (id) => {
     stats: STATS.map((s) => base[s] ?? 50),
     capture: esp.capture_rate ?? 45,
     exp: mon.base_experience ?? 60,
+    // Le talent principal, celui qui n'est pas caché.
+    talent:
+      mon.abilities
+        .filter((a) => !a.is_hidden)
+        .sort((a, b) => a.slot - b.slot)[0]?.ability?.name ?? null,
     // Les légendaires et les fabuleux n'ont rien à faire dans les herbes.
     rare: Boolean(esp.is_legendary || esp.is_mythical),
   };
@@ -86,6 +91,19 @@ await enParallele([...Array(MAX).keys()].map((i) => i + 1), async (id) => {
 const manquantes = fiches.filter((f) => !f).length;
 if (manquantes) throw new Error(`${manquantes} espèces manquantes`);
 console.log(`${MAX} fiches relevées`);
+
+/* ------------------------------------------------------------ les talents */
+
+// Seuls les talents effectivement portés par une de ces espèces nous
+// intéressent : inutile de traduire les trois cents autres.
+const talents = [...new Set(fiches.map((f) => f.talent).filter(Boolean))].sort();
+const talentsFr = {};
+await enParallele(talents, async (nom) => {
+  const data = await json(`https://pokeapi.co/api/v2/ability/${nom}`);
+  const fr = data?.names?.find((n) => n.language.name === "fr")?.name;
+  talentsFr[nom] = fr ?? nom;
+});
+console.log(`${talents.length} talents traduits`);
 
 /* --------------------------------------------------------- les évolutions */
 
@@ -124,7 +142,17 @@ for (const arbre of arbres) parcourir(arbre);
 const ligneFiche = (f) =>
   `  ${f.id}: [${JSON.stringify(f.nom)}, ${JSON.stringify(f.genre)}, ` +
   `${JSON.stringify(f.types)}, [${f.stats.join(", ")}], ` +
-  `${f.capture}, ${f.exp}${f.rare ? ", 1" : ""}],`;
+  `${f.capture}, ${f.exp}, ${JSON.stringify(f.talent)}${f.rare ? ", 1" : ""}],`;
+
+const blocTalents = [
+  "/**",
+  " * Nom français de chaque talent porté par une de ces espèces. Le jeu",
+  " * n'en applique qu'une poignée, les autres ne sont qu'affichés.",
+  " */",
+  "export const ABILITY_FR: Record<string, string> = {",
+  ...talents.map((t) => `  ${JSON.stringify(t)}: ${JSON.stringify(talentsFr[t])},`),
+  "};",
+].join("\n");
 
 const ligneEvolution = ([id, [niveau, vers]]) => `  ${id}: [${niveau}, ${vers}],`;
 
@@ -134,8 +162,9 @@ const fichier = `/**
  *
  * Chaque entrée tient en un tuple compact — nom et genre français, types,
  * statistiques de base dans l'ordre PV / Attaque / Défense / Attaque Spé. /
- * Défense Spé. / Vitesse, taux de capture, expérience de base, puis 1 pour un
- * légendaire ou un fabuleux, que les hautes herbes ne proposent jamais.
+ * Défense Spé. / Vitesse, taux de capture, expérience de base, talent
+ * principal, puis 1 pour un légendaire ou un fabuleux, que les hautes herbes
+ * ne proposent jamais.
  *
  * Fichier engendré par \`scripts/generer-dex.mjs\` : relancez-le plutôt que de
  * corriger une ligne à la main.
@@ -148,6 +177,7 @@ export type DexEntry = [
   base: number[],
   capture: number,
   exp: number,
+  talent: string | null,
   rare?: 1,
 ];
 
@@ -160,8 +190,10 @@ export const DEX_MAX = ${MAX};
 
 /** Espèces que l'on peut croiser dans les hautes herbes. */
 export const WILD_POOL: number[] = Object.entries(DEX)
-  .filter(([, entry]) => !entry[6])
+  .filter(([, entry]) => !entry[7])
   .map(([id]) => Number(id));
+
+${blocTalents}
 
 /**
  * Évolutions par montée de niveau. Le jeu ne connaît ni pierre, ni échange,

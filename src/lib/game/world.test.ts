@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SPECIES } from "./data";
-import { DEX } from "./dex";
+import { DEX, WILD_POOL } from "./dex";
 import {
   BUS_STOPS,
   LOCAL_SHARE,
@@ -320,9 +320,9 @@ describe("les hautes herbes", () => {
   });
 
   it("ne proposent que des espèces existantes et jamais un légendaire", () => {
-    const rares = new Set(
-      Object.keys(DEX).map(Number).filter((id) => DEX[id][6]),
-    );
+    // Le contraire du vivier : ce que les herbes ne doivent jamais rendre.
+    const vivier = new Set(WILD_POOL);
+    const rares = new Set(Object.keys(DEX).map(Number).filter((id) => !vivier.has(id)));
     for (const [id, map] of Object.entries(MAPS) as [MapId, MapSpec][]) {
       if (!map.encounters?.length) continue;
       for (let i = 0; i < 300; i++) {

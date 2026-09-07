@@ -192,7 +192,8 @@ describe("les chromatiques", () => {
 
   it("ne changent rien aux statistiques", () => {
     const normal = createMon(504, 20, false);
-    const brillant = { ...createMon(504, 20, true), ivs: normal.ivs };
+    // Même patrimoine et même nature : seule la livrée doit différer.
+    const brillant = { ...createMon(504, 20, true), ivs: normal.ivs, nature: normal.nature };
     expect(maxHp(brillant)).toBe(maxHp(normal));
     expect(statOf(brillant, "atk")).toBe(statOf(normal, "atk"));
   });

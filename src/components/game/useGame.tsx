@@ -66,6 +66,7 @@ import {
   DREAM_LEVEL,
   type GameState,
 } from "@/lib/game/state";
+import { abilityName, abilityWorks, natureName } from "@/lib/game/traits";
 import type { DsButton, ModeParts } from "../DSConsole";
 import BattleView from "./BattleView";
 import BusRide from "./BusRide";
@@ -1112,6 +1113,17 @@ export function useGame({
             id: "stats",
             label: `Att ${statOf(mon, "atk")} · Déf ${statOf(mon, "def")} · Vit ${statOf(mon, "spe")}`,
             sub: `Att.Spé ${statOf(mon, "spa")} · Déf.Spé ${statOf(mon, "spd")} — exp. ${mon.exp - socle}`,
+            disabled: true,
+            tone: "plain" as const,
+          },
+          {
+            id: "traits",
+            label: `Nature ${natureName(mon.nature)} · ${abilityName(mon.id)}`,
+            // Sur cent dix-huit talents, seule une poignée agit vraiment :
+            // autant le dire plutôt que de laisser croire le contraire.
+            sub: abilityWorks(mon.id)
+              ? "talent actif en combat"
+              : "talent sans effet dans ce jeu",
             disabled: true,
             tone: "plain" as const,
           },

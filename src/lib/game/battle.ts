@@ -18,6 +18,7 @@ import {
   type TypeName,
 } from "./data";
 import { ITEMS, countOf, effectOn, spend, type Bag, type ItemId } from "./items";
+import { NATURES, PINCH, abilityRules, natureMult } from "./traits";
 
 export type Mon = {
   uid: string;
@@ -40,6 +41,8 @@ export type Mon = {
    * survit pas au combat : elle vit dans le Pokémon le temps du duel.
    */
   confusion: number;
+  /** Rang de sa nature dans `NATURES` : elle infléchit ses statistiques. */
+  nature: number;
 };
 
 export type Status = "poison" | "brulure" | "paralysie" | "sommeil" | "gel";
@@ -124,6 +127,7 @@ export function createMon(id: number, level: number, shiny?: boolean): Mon {
     status: null,
     sleep: 0,
     confusion: 0,
+    nature: roll(NATURES.length),
   };
   mon.hp = maxHp(mon);
   return mon;
@@ -133,7 +137,11 @@ export const maxHp = (mon: Mon) =>
   computeStat(species(mon.id).base.hp, mon.ivs.hp, mon.level, true);
 
 export const statOf = (mon: Mon, key: Exclude<StatKey, "hp">) =>
-  computeStat(species(mon.id).base[key], mon.ivs[key], mon.level, false);
+  // La nature arrondit vers le bas, comme dans les jeux.
+  Math.floor(
+    computeStat(species(mon.id).base[key], mon.ivs[key], mon.level, false) *
+      natureMult(mon.nature, key),
+  );
 
 export const typesOf = (mon: Mon): TypeName[] => species(mon.id).types;
 
@@ -148,6 +156,25 @@ export function healMon(mon: Mon): Mon {
     sleep: 0,
     confusion: 0,
   };
+}
+
+/**
+ * Intimidation, jouée quand un Pokémon entre en scène : l'Attaque d'en face
+ * baisse d'un cran.
+ */
+export function onEnter(
+  entrant: Mon,
+  cibleStages: Stages,
+  cible: Mon,
+  mine: boolean,
+  messages: string[],
+): void {
+  if (!abilityRules(entrant.id).intimidate) return;
+  if (cibleStages.atk <= -6) return;
+  cibleStages.atk -= 1;
+  messages.push(
+    `${who(entrant, mine)} intimide ${who(cible, !mine)} : son Attaque baisse !`,
+  );
 }
 
 /** Comment nommer un Pokémon dans le texte, selon son camp. */
@@ -165,6 +192,7 @@ export function inflict(
   messages: string[],
 ): boolean {
   if (mon.status) return false;
+  if (abilityRules(mon.id).blocks?.includes(status)) return false;
   const types = typesOf(mon);
   const immunise =
     (status === "poison" && (types.includes("poison") || types.includes("steel"))) ||
@@ -361,22 +389,32 @@ function computeHit(
     return { damage: 0, eff: 1, crit: false, missed: false };
   }
 
+  const talent = abilityRules(attacker.id);
   const physical = mv.category === "physique";
-  // Une brûlure ampute de moitié l'attaque physique, comme dans les jeux.
-  const brulure = physical && attacker.status === "brulure" ? 0.5 : 1;
+  // Cran d'Acier fait de l'altération une force : elle ne coupe plus rien.
+  const brulure = physical && attacker.status === "brulure" && !talent.guts ? 0.5 : 1;
+  const cran = talent.guts && attacker.status ? 1.5 : 1;
   const a =
     statOf(attacker, physical ? "atk" : "spa") *
     stageMult(physical ? attackerStages.atk : attackerStages.spa) *
-    brulure;
+    brulure *
+    cran;
   const d =
     statOf(defender, physical ? "def" : "spd") *
     stageMult(physical ? defenderStages.def : defenderStages.spd);
 
-  const eff = effectiveness(mv.type, typesOf(defender));
+  // Lévitation ignore le Sol comme si le type n'y pouvait rien.
+  const eff =
+    abilityRules(defender.id).immune === mv.type
+      ? 0
+      : effectiveness(mv.type, typesOf(defender));
   if (eff === 0) return { damage: 0, eff: 0, crit: false, missed: false };
 
   const crit = rand() < 1 / 16;
   const stab = typesOf(attacker).includes(mv.type) ? 1.5 : 1;
+  // Engrais, Brasier, Torrent et Essaim : le dos au mur, on frappe plus fort.
+  const acule =
+    talent.pinch === mv.type && attacker.hp <= maxHp(attacker) * PINCH ? 1.5 : 1;
   const variance = (85 + roll(16)) / 100;
 
   const base =
@@ -385,7 +423,7 @@ function computeHit(
     ) + 2;
 
   return {
-    damage: Math.max(1, Math.floor(base * stab * eff * (crit ? 2 : 1) * variance)),
+    damage: Math.max(1, Math.floor(base * stab * eff * acule * (crit ? 2 : 1) * variance)),
     eff,
     crit,
     missed: false,
@@ -462,8 +500,12 @@ function applyMove(
     return;
   }
 
-  defender.hp = Math.max(0, defender.hp - hit.damage);
+  // Garde-Robe : depuis le maximum, on encaisse tout et il reste un PV.
+  const garde = abilityRules(defender.id).sturdy;
+  const survit = garde && defender.hp === maxHp(defender) && hit.damage >= defender.hp;
+  defender.hp = Math.max(survit ? 1 : 0, defender.hp - hit.damage);
   if (hit.crit) messages.push("Coup critique !");
+  if (survit) messages.push(`${who(defender, !fromPlayer)} tient bon grâce à son talent !`);
   const word = effWord(hit.eff);
   if (word) messages.push(word);
   if (isKo(defender)) {
@@ -474,6 +516,11 @@ function applyMove(
   // L'effet secondaire ne se déclenche que si la cible tient encore debout.
   if (mv.inflicts && rand() < mv.inflicts.chance) {
     inflict(defender, mv.inflicts.status, !fromPlayer, messages);
+  }
+  // Statik, Corps Ardent, Point Poison : toucher, c'est prendre un risque.
+  const riposte = abilityRules(defender.id).contact;
+  if (riposte && mv.category === "physique" && rand() < riposte.chance) {
+    inflict(attacker, riposte.status, fromPlayer, messages);
   }
   if (mv.confuses && rand() < mv.confuses) confuse(defender, !fromPlayer, messages);
   if (mv.flinch && rand() < mv.flinch) {
@@ -699,6 +746,7 @@ function foeSwitch(state: BattleState, index: number, messages: string[]): void 
   messages.push(
     `${state.trainer?.name ?? "L'adversaire"} rappelle ${sortant.name} et envoie ${entrant.name} !`,
   );
+  onEnter(entrant, state.playerStages, activeMon(state), false, messages);
 }
 
 /** Le camp adverse est-il vaincu ? Enchaîne sur le Pokémon suivant sinon. */
@@ -713,6 +761,7 @@ function afterFoeDown(state: BattleState, messages: string[]): void {
     state.foeTeam = state.foeTeam.filter((_, i) => i !== suivant);
     state.foeStages = noStages();
     messages.push(`${state.trainer?.name ?? "L'adversaire"} envoie ${state.foe.name} !`);
+    onEnter(state.foe, state.playerStages, activeMon(state), false, messages);
     return;
   }
 
@@ -1009,6 +1058,7 @@ export function switchTo(prev: BattleState, index: number): Turn {
   state.playerStages = noStages();
   state.mustSwitch = false;
   messages.push(`En avant, ${activeMon(state).name} !`);
+  onEnter(activeMon(state), state.foeStages, state.foe, true, messages);
 
   if (!forced) {
     foeActs(state, messages);
