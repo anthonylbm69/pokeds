@@ -35,6 +35,11 @@ export type Mon = {
   status: Status | null;
   /** Tours de sommeil restants, quand il dort. */
   sleep: number;
+  /**
+   * Tours de confusion restants. Contrairement aux altérations, elle ne
+   * survit pas au combat : elle vit dans le Pokémon le temps du duel.
+   */
+  confusion: number;
 };
 
 export type Status = "poison" | "brulure" | "paralysie" | "sommeil" | "gel";
@@ -118,6 +123,7 @@ export function createMon(id: number, level: number, shiny?: boolean): Mon {
     shiny: shiny ?? rand() < SHINY_RATE,
     status: null,
     sleep: 0,
+    confusion: 0,
   };
   mon.hp = maxHp(mon);
   return mon;
@@ -140,6 +146,7 @@ export function healMon(mon: Mon): Mon {
     moves: mon.moves.map((m) => ({ ...m, pp: m.max })),
     status: null,
     sleep: 0,
+    confusion: 0,
   };
 }
 
@@ -201,7 +208,36 @@ function canAct(mon: Mon, mine: boolean, messages: string[]): boolean {
     messages.push(`${who(mon, mine)} est paralysé, il ne peut plus bouger !`);
     return false;
   }
+  return throughConfusion(mon, mine, messages);
+}
+
+/** Embrouille la cible pour deux à quatre tours, si elle ne l'est pas déjà. */
+export function confuse(mon: Mon, mine: boolean, messages: string[]): boolean {
+  if (mon.confusion > 0) return false;
+  mon.confusion = 2 + roll(3);
+  messages.push(`${who(mon, mine)} est embrouillé !`);
   return true;
+}
+
+/**
+ * La confusion, résolue avant l'attaque : un coup sur trois se retourne
+ * contre celui qui le porte, avec une puissance fixe et sans type.
+ */
+function throughConfusion(mon: Mon, mine: boolean, messages: string[]): boolean {
+  if (mon.confusion <= 0) return true;
+  mon.confusion -= 1;
+  if (mon.confusion === 0) {
+    messages.push(`${who(mon, mine)} n'est plus embrouillé !`);
+    return true;
+  }
+  messages.push(`${who(mon, mine)} est embrouillé…`);
+  if (rand() >= 1 / 3) return true;
+
+  const degats = Math.max(1, Math.floor(maxHp(mon) * 0.08));
+  mon.hp = Math.max(0, mon.hp - degats);
+  messages.push(`Il se blesse dans sa confusion !`);
+  if (isKo(mon)) messages.push(`${who(mon, mine)} est K.O. !`);
+  return false;
 }
 
 /** Les dégâts de fin de tour : le poison et la brûlure rongent lentement. */
@@ -245,6 +281,8 @@ export type BattleState = {
   caught?: Mon;
   /** Le joueur doit choisir un remplaçant avant de continuer. */
   mustSwitch: boolean;
+  /** Camp qui recule ce tour-ci, s'il n'avait pas encore joué. */
+  flinched?: "mine" | "foe";
   runAttempts: number;
 };
 
@@ -252,7 +290,14 @@ export type Turn = { state: BattleState; messages: string[] };
 
 export const activeMon = (s: BattleState) => s.party[s.active];
 
+/** La confusion est propre au duel : elle ne sort pas de l'arène. */
+const clearConfusion = (mons: Mon[]) => {
+  for (const m of mons) m.confusion = 0;
+};
+
 export function startWild(party: Mon[], foe: Mon, bag: Bag): BattleState {
+  clearConfusion(party);
+  foe.confusion = 0;
   return {
     kind: "sauvage",
     party,
@@ -276,6 +321,7 @@ export function startTrainer(
   trainer: { name: string; title: string; reward: number },
   bag: Bag,
 ): BattleState {
+  clearConfusion([...party, ...team]);
   return {
     kind: "dresseur",
     party,
@@ -383,6 +429,20 @@ function applyMove(
   }
 
   if (mv.category === "statut") {
+    if (mv.raise) {
+      const stages = fromPlayer ? state.playerStages : state.foeStages;
+      if (stages[mv.raise.stat] >= 6) {
+        messages.push(`La stat de ${attacker.name} ne peut pas monter plus !`);
+      } else {
+        stages[mv.raise.stat] = Math.min(6, stages[mv.raise.stat] + mv.raise.stages);
+        messages.push(`${who(attacker, fromPlayer)} voit sa stat grimper !`);
+      }
+      return;
+    }
+    if (mv.confuses) {
+      if (!confuse(defender, !fromPlayer, messages)) messages.push("Mais cela échoue !");
+      return;
+    }
     if (mv.inflicts) {
       if (!inflict(defender, mv.inflicts.status, !fromPlayer, messages)) {
         messages.push("Mais cela échoue !");
@@ -414,6 +474,11 @@ function applyMove(
   // L'effet secondaire ne se déclenche que si la cible tient encore debout.
   if (mv.inflicts && rand() < mv.inflicts.chance) {
     inflict(defender, mv.inflicts.status, !fromPlayer, messages);
+  }
+  if (mv.confuses && rand() < mv.confuses) confuse(defender, !fromPlayer, messages);
+  if (mv.flinch && rand() < mv.flinch) {
+    state.flinched = fromPlayer ? "foe" : "mine";
+    messages.push(`${who(defender, !fromPlayer)} a peur !`);
   }
 }
 
@@ -593,6 +658,10 @@ function grantTo(
  * le même plan partout, plutôt que d'attaquer par défaut.
  */
 function foeActs(state: BattleState, messages: string[]): void {
+  if (state.flinched === "foe") {
+    messages.push(`${state.foe.name} ennemi a trop peur pour bouger !`);
+    return;
+  }
   const plan = foePlan(state);
   if (plan.do === "soin") return foeHeal(state, messages);
   if (plan.do === "change") return foeSwitch(state, plan.index, messages);
@@ -683,6 +752,8 @@ export function playerMove(prev: BattleState, moveIndex: number): Turn {
   const state = clone(prev);
   const messages: string[] = [];
   state.turn += 1;
+  // La peur ne vaut que pour le tour où elle a été provoquée.
+  state.flinched = undefined;
 
   const mine = activeMon(state).moves[moveIndex];
   const plan = foePlan(state);
@@ -703,6 +774,10 @@ export function playerMove(prev: BattleState, moveIndex: number): Turn {
         : rand() < 0.5;
 
   const actPlayer = () => {
+    if (state.flinched === "mine") {
+      messages.push(`${activeMon(state).name} a trop peur pour bouger !`);
+      return;
+    }
     if (!canAct(activeMon(state), true, messages)) return;
     applyMove(state, true, moveIndex, messages);
   };
@@ -713,6 +788,10 @@ export function playerMove(prev: BattleState, moveIndex: number): Turn {
     }
     if (plan.do === "change") {
       foeSwitch(state, plan.index, messages);
+      return;
+    }
+    if (state.flinched === "foe") {
+      messages.push(`${state.foe.name} ennemi a trop peur pour bouger !`);
       return;
     }
     if (theirIndex < 0) {
@@ -918,6 +997,8 @@ export function switchTo(prev: BattleState, index: number): Turn {
   const state = clone(prev);
   const messages: string[] = [];
   const forced = state.mustSwitch;
+  // Rappelé au chaud, il retrouve ses esprits.
+  state.party[state.active].confusion = 0;
 
   if (index === state.active || isKo(state.party[index])) {
     messages.push("Ce Pokémon ne peut pas combattre !");

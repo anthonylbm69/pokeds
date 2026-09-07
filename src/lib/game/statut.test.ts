@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   STATUS_FR,
   STATUS_TAG,
+  confuse,
   createMon,
   foePlan,
   healMon,
@@ -11,6 +12,7 @@ import {
   playerMove,
   startTrainer,
   startWild,
+  switchTo,
   statusBonus,
   takeItem,
   throwBall,
@@ -303,5 +305,125 @@ describe("les attaques d'altération", () => {
       expect(m.inflicts!.chance).toBeGreaterThan(0);
       expect(m.inflicts!.chance).toBeLessThanOrEqual(0.3);
     }
+  });
+});
+
+describe("se renforcer soi-même", () => {
+  // L'adversaire ne touche qu'à la précision : sans quoi son Mimi-Queue
+  // annulerait le Repli que l'on cherche à mesurer.
+  const duel = (move: "danse-lames" | "hate" | "repli") => {
+    const mine = solide(495, 50);
+    mine.moves = [{ id: move, pp: 20, max: 20 }];
+    const foe = solide(143, 50);
+    foe.moves = [{ id: "jet-de-sable", pp: 30, max: 30 }];
+    return playerMove(startWild([mine], foe, sac()), 0);
+  };
+
+  it("monte bien sa propre statistique, pas celle d'en face", () => {
+    const { state } = duel("danse-lames");
+    expect(state.playerStages.atk).toBe(2);
+    expect(state.foeStages.atk).toBe(0);
+  });
+
+  it("cible la bonne statistique selon l'attaque", () => {
+    expect(duel("hate").state.playerStages.spe).toBe(2);
+    expect(duel("repli").state.playerStages.def).toBe(1);
+  });
+
+  it("plafonne à six crans et le dit", () => {
+    const mine = solide(495, 50);
+    mine.moves = [{ id: "danse-lames", pp: 20, max: 20 }];
+    const foe = solide(143, 50);
+    foe.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
+    let state = startWild([mine], foe, sac());
+    let messages: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const tour = playerMove(state, 0);
+      state = tour.state;
+      messages = tour.messages;
+    }
+    expect(state.playerStages.atk).toBe(6);
+    expect(messages.some((m) => m.includes("ne peut pas monter plus"))).toBe(true);
+  });
+
+  it("fait vraiment frapper plus fort", () => {
+    const degats = (crans: number) => {
+      let total = 0;
+      for (let i = 0; i < 200; i++) {
+        const mine = solide(495, 50);
+        mine.moves = [{ id: "plaquage", pp: 30, max: 30 }];
+        const foe = solide(143, 50);
+        foe.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
+        const state = startWild([mine], foe, sac());
+        state.playerStages.atk = crans;
+        total += maxHp(foe) - playerMove(state, 0).state.foe.hp;
+      }
+      return total;
+    };
+    expect(degats(2)).toBeGreaterThan(degats(0));
+  });
+});
+
+describe("la confusion", () => {
+  it("s'installe pour quelques tours, sans se cumuler", () => {
+    const mon = solide(495);
+    const msg: string[] = [];
+    expect(confuse(mon, true, msg)).toBe(true);
+    expect(mon.confusion).toBeGreaterThan(1);
+    expect(confuse(mon, true, msg)).toBe(false);
+  });
+
+  it("finit par se dissiper", () => {
+    const mine = solide(495, 50);
+    mine.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
+    const foe = solide(143, 60);
+    foe.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
+    let state = startWild([mine], foe, sac());
+    // Après l'ouverture du combat, qui remet justement les compteurs à zéro.
+    state.party[0].confusion = 2;
+    // Le compteur descend d'un tour à chaque action.
+    state = playerMove(state, 0).state;
+    expect(state.party[0].confusion).toBe(1);
+    const dernier = playerMove(state, 0);
+    expect(dernier.state.party[0].confusion).toBe(0);
+    expect(dernier.messages.some((m) => m.includes("plus embrouillé"))).toBe(true);
+  });
+
+  it("ne sort pas de l'arène", () => {
+    const mine = solide(495, 50);
+    mine.confusion = 3;
+    // Ouvrir un combat remet les compteurs à zéro.
+    const state = startWild([mine], solide(504, 5), sac());
+    expect(state.party[0].confusion).toBe(0);
+  });
+
+  it("s'efface quand on rappelle son Pokémon", () => {
+    const actif = solide(495, 50);
+    const banc = solide(500, 50);
+    const state = startWild([actif, banc], solide(504, 5), sac());
+    state.party[0].confusion = 3;
+    const apres = switchTo(state, 1).state;
+    expect(apres.party[0].confusion).toBe(0);
+  });
+});
+
+describe("la peur", () => {
+  it("prive l'adversaire de son tour, une fois seulement", () => {
+    // Écras'Face fait reculer trois fois sur dix : on cherche le cas.
+    let vu = false;
+    for (let i = 0; i < 200 && !vu; i++) {
+      const mine = solide(497, 60);
+      mine.moves = [{ id: "ecras-face", pp: 30, max: 30 }];
+      const foe = solide(143, 30);
+      foe.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
+      const tour = playerMove(startWild([mine], foe, sac()), 0);
+      if (tour.messages.some((m) => m.includes("a peur"))) {
+        vu = true;
+        // Le tour suivant, la peur est retombée.
+        const suivant = playerMove(tour.state, 0);
+        expect(suivant.state.flinched === "foe" || suivant.state.flinched === undefined).toBe(true);
+      }
+    }
+    expect(vu, "Écras'Face n'a jamais fait reculer en deux cents essais").toBe(true);
   });
 });

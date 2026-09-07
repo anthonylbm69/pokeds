@@ -92,6 +92,12 @@ export type Move = {
    * si la cible est réceptive ; une attaque offensive la tire à `chance`.
    */
   inflicts?: { status: Status; chance: number };
+  /** Monte une de ses propres statistiques de `stages` crans. */
+  raise?: { stat: Exclude<StatKey, "hp"> | "acc"; stages: number };
+  /** Embrouille la cible : un coup sur trois se retourne contre elle. */
+  confuses?: number;
+  /** Fait reculer la cible si elle n'a pas encore joué. */
+  flinch?: number;
 };
 
 const MOVE_DATA = {
@@ -160,6 +166,18 @@ const MOVE_DATA = {
   "cage-eclair": { name: "Cage-Éclair", type: "electric", category: "statut", power: 0, accuracy: 90, pp: 20, inflicts: { status: "paralysie", chance: 1 } },
   toxik: { name: "Toxik", type: "poison", category: "statut", power: 0, accuracy: 90, pp: 10, inflicts: { status: "poison", chance: 1 } },
   berceuse: { name: "Berceuse", type: "normal", category: "statut", power: 0, accuracy: 55, pp: 15, inflicts: { status: "sommeil", chance: 1 } },
+
+  // Se renforcer soi-même, l'autre moitié de la tactique.
+  "danse-lames": { name: "Danse-Lames", type: "normal", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "atk", stages: 2 } },
+  repli: { name: "Repli", type: "water", category: "statut", power: 0, accuracy: 100, pp: 40, raise: { stat: "def", stages: 1 } },
+  hate: { name: "Hâte", type: "psychic", category: "statut", power: 0, accuracy: 100, pp: 30, raise: { stat: "spe", stages: 2 } },
+  "amplificateur": { name: "Amplificateur", type: "normal", category: "statut", power: 0, accuracy: 100, pp: 40, raise: { stat: "spa", stages: 1 } },
+  "abri-cotonneux": { name: "Abri Cotonneux", type: "grass", category: "statut", power: 0, accuracy: 100, pp: 40, raise: { stat: "spd", stages: 1 } },
+
+  // Embrouiller et faire reculer : deux façons de voler un tour.
+  "onde-folie": { name: "Onde Folie", type: "ghost", category: "statut", power: 0, accuracy: 100, pp: 10, confuses: 1 },
+  "ecras-face": { name: "Écras'Face", type: "normal", category: "physique", power: 40, accuracy: 100, pp: 15, flinch: 0.3 },
+  "morsure-peur": { name: "Croc de Mort", type: "dark", category: "physique", power: 65, accuracy: 95, pp: 15, flinch: 0.2 },
   "feu-follet": { name: "Feu Follet", type: "fire", category: "statut", power: 0, accuracy: 85, pp: 15, inflicts: { status: "brulure", chance: 1 } },
 } as const satisfies Record<string, Move>;
 
@@ -634,6 +652,20 @@ const STATUS_BY_TYPE = (() => {
 /** Niveau à partir duquel une espèce reconstituée sait poser un statut. */
 const STATUS_LEVEL = 12;
 
+/** Les attaques qui renforcent leur lanceur, rangées par type. */
+const BUFF_BY_TYPE = (() => {
+  const table: Partial<Record<TypeName, MoveId>> = {};
+  for (const id of Object.keys(MOVES) as MoveId[]) {
+    const mv = MOVES[id];
+    if (mv.category !== "statut" || !mv.raise) continue;
+    table[mv.type] ??= id;
+  }
+  return table;
+})();
+
+/** Niveau à partir duquel elle sait aussi se renforcer. */
+const BUFF_LEVEL = 25;
+
 /** Le plafond de puissance qu'un niveau autorise. */
 const ceilingAt = (level: number) => 25 + level * 3;
 
@@ -663,6 +695,10 @@ export function typedMoveset(types: TypeName[], level: number): MoveId[] {
   // cesse d'être écrasante contre un débutant.
   if (level >= STATUS_LEVEL) {
     for (const type of types) add(STATUS_BY_TYPE[type]);
+  }
+  // Plus tard encore, elle apprend à se renforcer avant de frapper.
+  if (level >= BUFF_LEVEL) {
+    for (const type of types) add(BUFF_BY_TYPE[type]);
   }
   for (const filler of ["vive-attaque", "plaquage", "charge"] as MoveId[]) {
     if (picks.length >= 4) break;

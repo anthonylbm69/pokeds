@@ -334,6 +334,7 @@ export function loadGame(): GameState | null {
         shiny: mon.shiny ?? false,
         status: mon.status ?? null,
         sleep: mon.sleep ?? 0,
+        confusion: 0,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
       starter: data.starter ?? data.party[0]?.id,
@@ -342,6 +343,7 @@ export function loadGame(): GameState | null {
         shiny: mon.shiny ?? false,
         status: mon.status ?? null,
         sleep: mon.sleep ?? 0,
+        confusion: 0,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
     };

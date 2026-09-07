@@ -6,17 +6,14 @@ import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import {
   MOVES,
   TYPE_FR,
-  effectiveness,
   expForLevel,
   species,
-  type MoveId,
 } from "@/lib/game/data";
 import {
   ITEMS,
   ITEM_ORDER,
   countOf,
   effectOn,
-  needsTarget,
   type ItemId,
 } from "@/lib/game/items";
 import {
@@ -26,13 +23,8 @@ import {
   isKo,
   maxHp,
   statOf,
-  playerMove,
   startTrainer,
   startWild,
-  switchTo,
-  takeItem,
-  throwBall,
-  tryRun,
   type BattleState,
   type Mon,
 } from "@/lib/game/battle";
@@ -79,6 +71,13 @@ import BattleView from "./BattleView";
 import BusRide from "./BusRide";
 import RegionMap from "./RegionMap";
 import TouchPanel, { type Choice } from "./TouchPanel";
+import {
+  battleAction,
+  battleScreen,
+  firstReady,
+  itemHint,
+  type BattleUi,
+} from "./battleFlow";
 import WorldView, { newPlayer, type PlayerPos } from "./WorldView";
 
 export type GameParts = ModeParts & {
@@ -98,19 +97,6 @@ type Then =
   | { do: "statique"; npc: string }
   | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
-
-type BattleUi = {
-  state: BattleState;
-  queue: string[];
-  view: "message" | "menu" | "moves" | "bag" | "bagCible" | "party";
-  /** Objet choisi au sac, en attente de sa cible. */
-  item?: ItemId;
-  throwing: boolean;
-  /** Le dresseur est encore en scène, avant son premier Pokémon. */
-  showTrainer: boolean;
-  /** `npc` n'est renseigné que pour un Pokémon posté sur la carte. */
-  origin: { kind: "sauvage"; npc?: string } | { kind: "dresseur"; npc: string };
-};
 
 type Counter = "boutique" | "velo";
 
@@ -147,30 +133,6 @@ const INTRO = [
 ];
 
 const ENCOUNTER_RATE = 0.14;
-
-/**
- * Ce que vaut une attaque contre l'adversaire du moment, écrit en clair.
- * Rien n'est révélé pour une attaque de statut, qui ne suit pas la table.
- */
-function efficaciteContre(move: MoveId, foe: Mon): string {
-  const mv = MOVES[move];
-  if (mv.category === "statut") return "";
-  const eff = effectiveness(mv.type, species(foe.id).types);
-  if (eff === 0) return " · sans effet";
-  if (eff > 1.5) return " · très efficace";
-  if (eff > 1) return " · efficace";
-  if (eff < 0.5) return " · quasi sans effet";
-  if (eff < 1) return " · peu efficace";
-  return "";
-}
-
-/** La note qui suit le décompte d'un objet : ce qu'il fait, en trois mots. */
-function itemHint(id: ItemId): string {
-  const data = ITEMS[id];
-  if (data.kind === "rappel") return " — ranime un K.O.";
-  if (data.kind === "soin") return ` — rend ${data.heal} PV`;
-  return data.bonus && data.bonus > 1 ? ` — capture ×${data.bonus}` : "";
-}
 
 /** Durée du trajet en autocar, animation comprise. */
 const RIDE_MS = 2800;
@@ -505,12 +467,6 @@ export function useGame({
   );
 
   /** Premier Pokémon envoyable : le curseur ne se pose jamais sur un K.O. */
-  const firstReady = useCallback(
-    (s: BattleState) =>
-      Math.max(0, s.party.findIndex((m, i) => !isKo(m) && i !== s.active)),
-    [],
-  );
-
   /** Fait avancer la file de messages d'un combat. */
   const advanceBattle = useCallback(
     (ui: BattleUi) => {
@@ -533,7 +489,7 @@ export function useGame({
         ui: { ...ui, queue, throwing: false, view: ui.state.mustSwitch ? "party" : "menu" },
       });
     },
-    [finishBattle, firstReady],
+    [finishBattle],
   );
 
   const runTurn = useCallback(
@@ -921,108 +877,7 @@ export function useGame({
   );
 
   const choices = useMemo<{ list: Choice[]; layout: "grid" | "list" | "row"; hint: string; title: string }>(() => {
-    if (battleUi) {
-      const s = battleUi.state;
-      const mine = activeMon(s);
-      const arena =
-        s.kind === "sauvage" ? "Combat sauvage" : `Combat — ${s.trainer?.name}`;
-
-      // Pendant le défilement du texte, aucune commande n'est proposée.
-      if (battleUi.view === "message") {
-        return { title: arena, hint: "A pour continuer", layout: "row", list: [] };
-      }
-      if (battleUi.view === "menu") {
-        return {
-          title: arena,
-          hint: "Croix pour choisir · A pour valider",
-          layout: "grid",
-          list: [
-            { id: "fight", label: "COMBAT", tone: "fight" },
-            {
-              id: "bag",
-              label: "SAC",
-              tone: "bag",
-              sub: `${ITEM_ORDER.reduce((n, id) => n + countOf(s.bag, id), 0)} objets`,
-            },
-            { id: "party", label: "POKÉMON", tone: "party" },
-            { id: "run", label: "FUITE", tone: "run", disabled: s.kind === "dresseur" },
-          ],
-        };
-      }
-      if (battleUi.view === "moves") {
-        return {
-          title: `Attaques de ${mine.name}`,
-          hint: "A pour attaquer · B pour revenir",
-          layout: "grid",
-          list: [
-            ...mine.moves.map((m) => ({
-              id: m.id,
-              label: MOVES[m.id].name,
-              sub: `${TYPE_FR[MOVES[m.id].type]} · ${m.pp}/${m.max} PP${efficaciteContre(
-                m.id,
-                s.foe,
-              )}`,
-              disabled: m.pp <= 0,
-              tone: "fight" as const,
-            })),
-            { id: "back", label: "RETOUR", tone: "back" as const },
-          ],
-        };
-      }
-      if (battleUi.view === "bag") {
-        return {
-          title: "Sac",
-          hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
-          layout: "list",
-          list: [
-            ...ITEM_ORDER.filter((id) => countOf(s.bag, id) > 0).map((id) => ({
-              id,
-              label: ITEMS[id].name,
-              sub:
-                ITEMS[id].kind === "ball" && s.kind === "dresseur"
-                  ? `× ${countOf(s.bag, id)} — pas sur le Pokémon d'un autre`
-                  : `× ${countOf(s.bag, id)}${itemHint(id)}`,
-              disabled: ITEMS[id].kind === "ball" && s.kind === "dresseur",
-              tone: "bag" as const,
-            })),
-            { id: "back", label: "RETOUR", tone: "back" as const },
-          ],
-        };
-      }
-
-      if (battleUi.view === "bagCible") {
-        const item = battleUi.item ?? "potion";
-        return {
-          title: `${ITEMS[item].name} sur qui ?`,
-          hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
-          layout: "list",
-          list: [
-            ...s.party.map((m, i) => ({
-              id: `cible:${i}`,
-              ...monLine(m),
-              disabled: effectOn(item, m).refus !== null,
-              tone: "party" as const,
-            })),
-            { id: "back", label: "RETOUR", tone: "back" as const },
-          ],
-        };
-      }
-      return {
-        title: "Équipe",
-        hint: s.mustSwitch ? "Choisissez un Pokémon en forme" : "A pour envoyer · B pour revenir",
-        layout: "list",
-        list: [
-          ...s.party.map((m, i) => ({
-            id: m.uid,
-            label: m.name,
-            sub: `N.${m.level} · ${m.hp} PV`,
-            disabled: isKo(m) || i === s.active,
-            tone: "party" as const,
-          })),
-          { id: "back", label: "RETOUR", tone: "back" as const, disabled: s.mustSwitch },
-        ],
-      };
-    }
+    if (battleUi) return battleScreen(battleUi, monLine);
 
     if (phase.kind === "starter") {
       return {
@@ -1466,62 +1321,16 @@ export function useGame({
       }
 
       if (battleUi) {
-        const ui = battleUi;
-        if (ui.view === "menu") {
-          if (choice.id === "fight") {
-            setCursor(0);
-            setPhase({ kind: "battle", ui: { ...ui, view: "moves" } });
-          } else if (choice.id === "bag") {
-            setCursor(0);
-            setPhase({ kind: "battle", ui: { ...ui, view: "bag" } });
-          } else if (choice.id === "party") {
-            setCursor(firstReady(ui.state));
-            setPhase({ kind: "battle", ui: { ...ui, view: "party" } });
-          } else if (choice.id === "run") {
-            runTurn(ui, tryRun(ui.state));
-          }
-          return;
+        const action = battleAction(battleUi, choice, index);
+        if (action.do === "tour") {
+          runTurn(battleUi, action.turn, action.throwing);
+        } else if (action.do === "vue") {
+          setCursor(action.cursor ?? 0);
+          setPhase({
+            kind: "battle",
+            ui: { ...battleUi, view: action.view, item: action.item ?? battleUi.item },
+          });
         }
-        if (ui.view === "moves") {
-          if (choice.id === "back") {
-            setCursor(0);
-            setPhase({ kind: "battle", ui: { ...ui, view: "menu" } });
-            return;
-          }
-          runTurn(ui, playerMove(ui.state, index));
-          return;
-        }
-        if (ui.view === "bag") {
-          if (choice.id === "back") {
-            setCursor(0);
-            setPhase({ kind: "battle", ui: { ...ui, view: "menu" } });
-            return;
-          }
-          const item = choice.id as ItemId;
-          // Une Ball part sur l'adversaire ; un soin demande d'abord sa cible.
-          if (needsTarget(item)) {
-            setCursor(0);
-            setPhase({ kind: "battle", ui: { ...ui, view: "bagCible", item } });
-          } else {
-            runTurn(ui, throwBall(ui.state, item), true);
-          }
-          return;
-        }
-        if (ui.view === "bagCible") {
-          if (choice.id === "back") {
-            setCursor(0);
-            setPhase({ kind: "battle", ui: { ...ui, view: "bag" } });
-            return;
-          }
-          runTurn(ui, takeItem(ui.state, ui.item ?? "potion", Number(choice.id.split(":")[1])));
-          return;
-        }
-        if (choice.id === "back") {
-          setCursor(0);
-          setPhase({ kind: "battle", ui: { ...ui, view: "menu" } });
-          return;
-        }
-        runTurn(ui, switchTo(ui.state, index));
         return;
       }
 
@@ -1556,7 +1365,7 @@ export function useGame({
         else if (choice.id === "title") onExit();
       }
     },
-    [choices, phase, game, battleUi, draftName, chooseStarter, runTurn, save, buy, firstReady, onOpenDex, onExit],
+    [choices, phase, game, battleUi, draftName, chooseStarter, runTurn, save, buy, onOpenDex, onExit],
   );
 
   const moveCursor = useCallback(
