@@ -17,7 +17,15 @@ import {
   type StatKey,
   type TypeName,
 } from "./data";
-import { ITEMS, countOf, effectOn, spend, type Bag, type ItemId } from "./items";
+import {
+  ITEMS,
+  countOf,
+  effectOn,
+  holdRules,
+  spend,
+  type Bag,
+  type ItemId,
+} from "./items";
 import { NATURES, PINCH, abilityRules, natureMult } from "./traits";
 
 export type Mon = {
@@ -43,6 +51,8 @@ export type Mon = {
   confusion: number;
   /** Rang de sa nature dans `NATURES` : elle infléchit ses statistiques. */
   nature: number;
+  /** Objet confié. Il agit tant qu'il est porté ; une Baie se consomme. */
+  held: ItemId | null;
 };
 
 export type Status = "poison" | "brulure" | "paralysie" | "sommeil" | "gel";
@@ -128,6 +138,7 @@ export function createMon(id: number, level: number, shiny?: boolean): Mon {
     sleep: 0,
     confusion: 0,
     nature: roll(NATURES.length),
+    held: null,
   };
   mon.hp = maxHp(mon);
   return mon;
@@ -266,6 +277,30 @@ function throughConfusion(mon: Mon, mine: boolean, messages: string[]): boolean 
   messages.push(`Il se blesse dans sa confusion !`);
   if (isKo(mon)) messages.push(`${who(mon, mine)} est K.O. !`);
   return false;
+}
+
+/**
+ * Ce que l'objet tenu fait en fin de tour : les Restes régénèrent, une Baie
+ * se croque quand les PV tombent bas — et disparaît alors.
+ */
+function heldTick(mon: Mon, mine: boolean, messages: string[]): void {
+  if (isKo(mon) || !mon.held) return;
+  const regle = holdRules(mon.held);
+  const max = maxHp(mon);
+
+  if (regle.regen && mon.hp < max) {
+    const rendu = Math.max(1, Math.floor(max * regle.regen));
+    mon.hp = Math.min(max, mon.hp + rendu);
+    messages.push(`${who(mon, mine)} récupère quelques PV grâce à ses Restes.`);
+  }
+
+  if (regle.berry && mon.hp <= max * regle.berry.below) {
+    const nom = ITEMS[mon.held].name;
+    mon.hp = Math.min(max, mon.hp + regle.berry.heal);
+    // Une Baie ne sert qu'une fois : elle est mangée.
+    mon.held = null;
+    messages.push(`${who(mon, mine)} croque sa ${nom} et reprend des forces !`);
+  }
 }
 
 /** Les dégâts de fin de tour : le poison et la brûlure rongent lentement. */
@@ -412,6 +447,9 @@ function computeHit(
 
   const crit = rand() < 1 / 16;
   const stab = typesOf(attacker).includes(mv.type) ? 1.5 : 1;
+  // Ce que l'attaquant porte enfle le coup ; ce que la cible porte l'amortit.
+  const porte = holdRules(attacker.held).power ?? 1;
+  const amorti = holdRules(defender.held).guard ?? 1;
   // Engrais, Brasier, Torrent et Essaim : le dos au mur, on frappe plus fort.
   const acule =
     talent.pinch === mv.type && attacker.hp <= maxHp(attacker) * PINCH ? 1.5 : 1;
@@ -423,7 +461,10 @@ function computeHit(
     ) + 2;
 
   return {
-    damage: Math.max(1, Math.floor(base * stab * eff * acule * (crit ? 2 : 1) * variance)),
+    damage: Math.max(
+      1,
+      Math.floor((base * stab * eff * acule * porte * (crit ? 2 : 1) * variance) / amorti),
+    ),
     eff,
     crit,
     missed: false,
@@ -613,9 +654,13 @@ function foeChoice(state: BattleState): number {
   return best;
 }
 
-// Un Pokémon paralysé ne court plus qu'au quart de sa vitesse.
+// Un Pokémon paralysé ne court plus qu'au quart de sa vitesse ; les Lunettes
+// Choix, elles, font toujours passer devant à priorité égale.
 const speed = (mon: Mon, stages: Stages) =>
-  statOf(mon, "spe") * stageMult(stages.spe) * (mon.status === "paralysie" ? 0.25 : 1);
+  statOf(mon, "spe") *
+  stageMult(stages.spe) *
+  (mon.status === "paralysie" ? 0.25 : 1) *
+  (holdRules(mon.held).quick ? 1e6 : 1);
 
 /* ------------------------------------------------------- fin de combat */
 
@@ -892,6 +937,10 @@ function endOfTurn(state: BattleState, messages: string[]): void {
     residual(state.foe, false, messages);
     residual(mine, true, messages);
   }
+
+  // L'objet tenu passe après les altérations : une Baie sauve encore.
+  heldTick(mine, true, messages);
+  heldTick(state.foe, false, messages);
 }
 
 /* -------------------------------------------------------------- capture */

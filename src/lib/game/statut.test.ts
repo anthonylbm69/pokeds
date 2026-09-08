@@ -427,3 +427,90 @@ describe("la peur", () => {
     expect(vu, "Écras'Face n'a jamais fait reculer en deux cents essais").toBe(true);
   });
 });
+
+describe("les objets tenus en combat", () => {
+  const duel = (mine: Mon, foe: Mon) => playerMove(startWild([mine], foe, sac()), 0);
+  const paisible = (id: number, level = 50) => {
+    const m = solide(id, level);
+    m.moves = [{ id: "mimi-queue", pp: 30, max: 30 }];
+    return m;
+  };
+
+  it("régénèrent des PV à chaque fin de tour", () => {
+    const mine = paisible(495);
+    mine.hp = 20;
+    mine.held = "restes";
+    const { state, messages } = duel(mine, paisible(143, 60));
+    expect(state.party[0].hp).toBeGreaterThan(20);
+    expect(messages.some((m) => m.includes("Restes"))).toBe(true);
+  });
+
+  it("ne débordent pas le maximum", () => {
+    const mine = paisible(495);
+    mine.held = "restes";
+    const { state } = duel(mine, paisible(143, 60));
+    expect(state.party[0].hp).toBeLessThanOrEqual(maxHp(mine));
+  });
+
+  it("font frapper plus fort", () => {
+    const degats = (objet: "ceinture" | null) => {
+      let total = 0;
+      for (let i = 0; i < 250; i++) {
+        const mine = solide(495, 50);
+        mine.moves = [{ id: "plaquage", pp: 30, max: 30 }];
+        mine.held = objet;
+        const foe = paisible(143, 50);
+        total += maxHp(foe) - duel(mine, foe).state.foe.hp;
+      }
+      return total;
+    };
+    expect(degats("ceinture")).toBeGreaterThan(degats(null));
+  });
+
+  it("amortissent ce que l'on encaisse", () => {
+    // La cible doit survivre au coup : si elle tombe dans les deux cas, on
+    // mesure ses PV maximum, pas l'amorti.
+    const subis = (objet: "roche-royale" | null) => {
+      let total = 0;
+      for (let i = 0; i < 250; i++) {
+        const mine = paisible(143, 70);
+        mine.held = objet;
+        const foe = solide(495, 30);
+        foe.moves = [{ id: "plaquage", pp: 30, max: 30 }];
+        total += maxHp(mine) - duel(mine, foe).state.party[0].hp;
+      }
+      return total;
+    };
+    expect(subis("roche-royale")).toBeLessThan(subis(null));
+  });
+
+  it("se croquent une fois quand les PV tombent bas", () => {
+    const mine = paisible(495, 50);
+    mine.hp = Math.floor(maxHp(mine) * 0.3);
+    mine.held = "baie-oran";
+    const { state, messages } = duel(mine, paisible(143, 60));
+    expect(state.party[0].hp).toBeGreaterThan(mine.hp);
+    expect(messages.some((m) => m.includes("croque"))).toBe(true);
+    // La Baie a été mangée : elle ne resservira pas.
+    expect(state.party[0].held).toBeNull();
+  });
+
+  it("laissent la Baie intacte tant que les PV tiennent", () => {
+    const mine = paisible(495, 50);
+    mine.held = "baie-oran";
+    const { state } = duel(mine, paisible(143, 60));
+    expect(state.party[0].held).toBe("baie-oran");
+  });
+
+  it("donnent l'initiative aux Lunettes Choix", () => {
+    // Roitiflam est plus lent que Majaspic ; avec les Lunettes, il passe devant.
+    const devant = (objet: "lunettes" | null) => {
+      const mine = paisible(500, 50);
+      mine.held = objet;
+      const foe = paisible(497, 50);
+      const { messages } = duel(mine, foe);
+      return !messages[0]?.includes("ennemi");
+    };
+    expect(devant("lunettes")).toBe(true);
+  });
+});

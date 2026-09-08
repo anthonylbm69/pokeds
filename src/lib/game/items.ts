@@ -16,9 +16,14 @@ export type ItemId =
   | "rappel"
   | "totalsoin"
   | "masterball"
+  | "restes"
+  | "ceinture"
+  | "baie-oran"
+  | "roche-royale"
+  | "lunettes"
   | `ct-${MoveId}`;
 
-export type ItemKind = "ball" | "soin" | "rappel" | "statut" | "ct";
+export type ItemKind = "ball" | "soin" | "rappel" | "statut" | "ct" | "tenu";
 
 export type Item = {
   name: string;
@@ -32,6 +37,25 @@ export type Item = {
   share?: number;
   /** Attaque enseignée, pour une Capsule Technique. */
   teaches?: MoveId;
+  /** Ce que l'objet fait quand un Pokémon le porte. */
+  hold?: Hold;
+};
+
+/**
+ * L'effet d'un objet tenu. Chaque champ est indépendant : un objet peut
+ * régénérer et amortir à la fois, si on l'écrit ainsi.
+ */
+export type Hold = {
+  /** Part des PV maximum rendue à la fin de chaque tour. */
+  regen?: number;
+  /** Multiplie les dégâts que le porteur inflige. */
+  power?: number;
+  /** Divise les dégâts que le porteur encaisse. */
+  guard?: number;
+  /** Rend des PV quand les siens tombent sous `below`, une seule fois. */
+  berry?: { below: number; heal: number };
+  /** Le porteur frappe toujours en premier à priorité égale. */
+  quick?: true;
 };
 
 /**
@@ -101,6 +125,38 @@ export const ITEMS: Record<ItemId, Item> = {
   totalsoin: { name: "Total Soin", price: 600, kind: "statut" },
   // Ne se vend pas : le Professeur la remet pour un Pokédex bien rempli.
   masterball: { name: "Master Ball", price: 0, kind: "ball", bonus: 255 },
+
+  // Les objets à tenir. Ils ne s'utilisent pas : on les confie.
+  restes: {
+    name: "Restes",
+    price: 2500,
+    kind: "tenu",
+    hold: { regen: 1 / 16 },
+  },
+  ceinture: {
+    name: "Ceinture Force",
+    price: 2000,
+    kind: "tenu",
+    hold: { power: 1.2 },
+  },
+  "baie-oran": {
+    name: "Baie Oran",
+    price: 400,
+    kind: "tenu",
+    hold: { berry: { below: 0.5, heal: 30 } },
+  },
+  "roche-royale": {
+    name: "Roche Royale",
+    price: 2200,
+    kind: "tenu",
+    hold: { guard: 1.2 },
+  },
+  lunettes: {
+    name: "Lunettes Choix",
+    price: 3000,
+    kind: "tenu",
+    hold: { power: 1.5, quick: true },
+  },
 };
 
 /** L'ordre des rayons et du sac : du plus courant au plus rare. */
@@ -117,6 +173,11 @@ export const ITEM_ORDER: ItemId[] = [
   "rappel",
   "totalsoin",
   "masterball",
+  "restes",
+  "ceinture",
+  "baie-oran",
+  "roche-royale",
+  "lunettes",
   // Les Capsules ferment la marche : elles sont nombreuses et rares.
   ...CT_MOVES.map(ctId),
 ];
@@ -130,6 +191,7 @@ export const emptyBag = (): Bag => ({
   ball: 0, superball: 0, hyperball: 0,
   potion: 0, superpotion: 0, hyperpotion: 0, rappel: 0, totalsoin: 0,
   masterball: 0,
+  restes: 0, ceinture: 0, "baie-oran": 0, "roche-royale": 0, lunettes: 0,
   ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
 } as Bag);
 
@@ -180,7 +242,7 @@ export function effectOn(
   if (!mon) return { healed: 0, refus: "Aucun Pokémon à soigner." };
 
   const max = maxHp(mon);
-  if (data.kind === "ct") return { healed: 0, refus: null };
+  if (data.kind === "ct" || data.kind === "tenu") return { healed: 0, refus: null };
   if (data.kind === "statut") {
     if (!mon.status) return { healed: 0, refus: `${mon.name} se porte très bien.` };
     return { healed: 0, refus: null };
@@ -203,3 +265,10 @@ export const needsTarget = (item: ItemId) =>
 
 /** Une CT s'enseigne hors combat, et seulement là. */
 export const isCT = (item: ItemId) => ITEMS[item].kind === "ct";
+
+/** Un objet tenu se confie, il ne s'emploie pas. */
+export const isHeld = (item: ItemId) => ITEMS[item].kind === "tenu";
+
+/** Ce que l'objet porté par ce Pokémon sait faire — rien s'il n'en porte pas. */
+export const holdRules = (held: ItemId | null | undefined): Hold =>
+  (held && ITEMS[held]?.hold) || {};

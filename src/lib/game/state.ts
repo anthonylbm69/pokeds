@@ -115,7 +115,15 @@ export function withDreamTeam(state: GameState): GameState {
   };
 }
 
+/**
+ * Deux emplacements de sauvegarde. Le premier garde la clé historique, pour
+ * qu'une partie déjà commencée se retrouve exactement là où elle était.
+ */
+export const SLOTS = [1, 2] as const;
+export type Slot = (typeof SLOTS)[number];
+
 const SAVE_KEY = "pokeds:partie";
+const slotKey = (slot: Slot) => (slot === 1 ? SAVE_KEY : `${SAVE_KEY}:${slot}`);
 
 export function newGame(name: string): GameState {
   return {
@@ -283,6 +291,58 @@ export function teachMove(
   };
 }
 
+/**
+ * Confie un objet à un Pokémon. Celui qu'il portait déjà retourne au sac :
+ * rien ne se perd, contrairement aux jeux d'origine où l'on pouvait écraser.
+ */
+export function giveHeld(
+  state: GameState,
+  item: ItemId,
+  index: number,
+): { state: GameState; message: string } {
+  const mon = state.party[index];
+  if (!mon) return { state, message: "Aucun Pokémon à qui le confier." };
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
+  if (mon.held === item) {
+    return { state, message: `${mon.name} porte déjà ${ITEMS[item].name}.` };
+  }
+
+  const rendu = mon.held;
+  const bag = { ...spend(state.bag, item) };
+  if (rendu) bag[rendu] = countOf(bag, rendu) + 1;
+
+  return {
+    state: {
+      ...state,
+      bag,
+      party: state.party.map((m, i) => (i === index ? { ...m, held: item } : m)),
+    },
+    message: rendu
+      ? `${mon.name} rend ${ITEMS[rendu].name} et prend ${ITEMS[item].name}.`
+      : `${mon.name} porte maintenant ${ITEMS[item].name}.`,
+  };
+}
+
+/** Reprend l'objet d'un Pokémon et le remet au sac. */
+export function takeHeld(
+  state: GameState,
+  index: number,
+): { state: GameState; message: string } {
+  const mon = state.party[index];
+  if (!mon?.held) return { state, message: "Il ne porte rien." };
+  const item = mon.held;
+  return {
+    state: {
+      ...state,
+      bag: { ...state.bag, [item]: countOf(state.bag, item) + 1 },
+      party: state.party.map((m, i) => (i === index ? { ...m, held: null } : m)),
+    },
+    message: `${mon.name} rend ${ITEMS[item].name}.`,
+  };
+}
+
 /* -------------------------------------------------------------------- PC */
 
 /**
@@ -389,19 +449,113 @@ export const markSeen = (state: GameState, id: number): GameState =>
 
 /* ---------------------------------------------------------- sauvegarde */
 
-export function saveGame(state: GameState): void {
+/** Ce qui coiffe un fichier exporté : de quoi le reconnaître et le dater. */
+export type SaveFile = {
+  jeu: "pokeds";
+  version: 1;
+  exporte: string;
+  partie: GameState;
+};
+
+/** Le contenu du fichier à télécharger, prêt à écrire. */
+export function exportSave(state: GameState): string {
+  const fichier: SaveFile = {
+    jeu: "pokeds",
+    version: 1,
+    exporte: new Date().toISOString(),
+    partie: state,
+  };
+  return JSON.stringify(fichier, null, 2);
+}
+
+/** Un nom de fichier qui dit de quelle partie il s'agit. */
+export function exportName(state: GameState): string {
+  const qui = (state.name || "dresseur").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const quand = new Date().toISOString().slice(0, 10);
+  return `pokeds-${qui}-${quand}.json`;
+}
+
+/**
+ * Relit un fichier exporté. Tout ce qui n'est pas une sauvegarde de ce jeu
+ * est refusé plutôt que chargé à moitié.
+ */
+export function importSave(texte: string): { state: GameState } | { erreur: string } {
+  let brut: unknown;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    brut = JSON.parse(texte);
+  } catch {
+    return { erreur: "Ce fichier n'est pas lisible." };
+  }
+  const fichier = brut as Partial<SaveFile>;
+  if (fichier?.jeu !== "pokeds" || !fichier.partie) {
+    return { erreur: "Ce fichier ne vient pas de ce jeu." };
+  }
+  const state = reviveGame(fichier.partie);
+  if (!state) return { erreur: "Cette sauvegarde est abîmée." };
+  return { state };
+}
+
+export function saveGame(state: GameState, slot: Slot = 1): void {
+  try {
+    localStorage.setItem(slotKey(slot), JSON.stringify(state));
   } catch {
     // Navigation privée ou quota plein : la partie continue en mémoire.
   }
 }
 
-export function loadGame(): GameState | null {
+/** Efface un emplacement, sans toucher aux autres. */
+export function clearSlot(slot: Slot): void {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    localStorage.removeItem(slotKey(slot));
+  } catch {
+    // Rien à faire : il n'y avait rien à effacer.
+  }
+}
+
+/**
+ * Ce qu'un emplacement contient, en une ligne, sans le charger vraiment :
+ * de quoi remplir un menu de sélection.
+ */
+export type SlotInfo = {
+  slot: Slot;
+  name: string;
+  badges: number;
+  party: number;
+  caught: number;
+  map: string;
+} | null;
+
+export function slotInfo(slot: Slot): SlotInfo {
+  const state = loadGame(slot);
+  if (!state) return null;
+  return {
+    slot,
+    name: state.name || "Sans nom",
+    badges: state.flags.filter((f) => f.startsWith("insigne:")).length,
+    party: state.party.length,
+    caught: state.caught.length,
+    map: state.map,
+  };
+}
+
+export function loadGame(slot: Slot = 1): GameState | null {
+  try {
+    const raw = localStorage.getItem(slotKey(slot));
     if (!raw) return null;
-    const data = JSON.parse(raw) as GameState;
+    return reviveGame(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remet une sauvegarde d'aplomb : une partie plus ancienne ignore les champs
+ * ajoutés depuis, et un fichier bricolé à la main ne doit pas passer.
+ * Renvoie `null` si ce n'est pas une sauvegarde de ce jeu.
+ */
+export function reviveGame(brut: unknown): GameState | null {
+  try {
+    const data = brut as GameState;
     if (data?.version !== 1 || !Array.isArray(data.party)) return null;
     // Une sauvegarde éditée à la main ne doit pas dépasser les PV maximum, et
     // une partie plus ancienne ignore les champs ajoutés depuis.
@@ -427,6 +581,7 @@ export function loadGame(): GameState | null {
         // Une partie d'avant les natures reçoit la neutre : rien ne change
         // pour un Pokémon déjà élevé.
         nature: mon.nature ?? 0,
+        held: mon.held ?? null,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
       starter: data.starter ?? data.party[0]?.id,
@@ -439,6 +594,7 @@ export function loadGame(): GameState | null {
         // Une partie d'avant les natures reçoit la neutre : rien ne change
         // pour un Pokémon déjà élevé.
         nature: mon.nature ?? 0,
+        held: mon.held ?? null,
         hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
       })),
     };
@@ -447,9 +603,9 @@ export function loadGame(): GameState | null {
   }
 }
 
-export function hasSave(): boolean {
+export function hasSave(slot: Slot = 1): boolean {
   try {
-    return localStorage.getItem(SAVE_KEY) !== null;
+    return localStorage.getItem(slotKey(slot)) !== null;
   } catch {
     return false;
   }
