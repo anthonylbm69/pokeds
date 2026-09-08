@@ -184,6 +184,65 @@ export const TRACKS = {
   },
 
   /* Les cimes : la mineur, lent et aéré, pour la neige et la crête. */
+  /**
+   * La grotte : deux voix graves qui tournent lentement, avec de longs
+   * silences. On doit s'y sentir seul.
+   */
+  grotte: {
+    tempo: 72,
+    loop: true,
+    voices: [
+      {
+        wave: "triangle",
+        gain: 0.16,
+        source: `
+          D3:8 -:4 F3:4
+          A3:8 -:8
+          G3:8 -:4 E3:4
+          D3:12 -:4
+        `,
+      },
+      {
+        wave: "sine",
+        gain: 0.09,
+        source: `
+          D2:16
+          A2:16
+          C3:16
+          D2:16
+        `,
+      },
+    ],
+  },
+
+  /** Le Surf : un balancement régulier, comme une houle. */
+  surf: {
+    tempo: 108,
+    loop: true,
+    voices: [
+      {
+        wave: "triangle",
+        gain: 0.17,
+        source: `
+          C5:4 E5:4 G5:4 E5:4
+          F5:4 A5:4 G5:8
+          D5:4 F5:4 A5:4 F5:4
+          E5:4 C5:4 D5:8
+        `,
+      },
+      {
+        wave: "sine",
+        gain: 0.1,
+        source: `
+          C3:8 G3:8
+          F3:8 C4:8
+          D3:8 A3:8
+          C3:8 G3:8
+        `,
+      },
+    ],
+  },
+
   cime: {
     tempo: 96,
     loop: true,
@@ -262,7 +321,13 @@ export const TRACKS = {
  * de Ligue hérite du bon morceau sans qu'on ait à y penser — c'est l'oubli
  * qui avait laissé deux Arènes sur la musique de ville.
  */
-export function trackForMap(map: string): TrackId {
+/**
+ * La piste d'un lieu. `surfing` prime sur la carte : on entend la houle où
+ * que l'on nage.
+ */
+export function trackForMap(map: string, surfing = false): TrackId {
+  if (surfing) return "surf";
+  if (map === "grotte") return "grotte";
   if (map.startsWith("arene")) return "dresseur";
   if (map.startsWith("ligue")) return "ligue";
   if (map === "route5") return "desert";

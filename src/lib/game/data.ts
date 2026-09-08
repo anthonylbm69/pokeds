@@ -98,7 +98,17 @@ export type Move = {
   confuses?: number;
   /** Fait reculer la cible si elle n'a pas encore joué. */
   flinch?: number;
+  /** Part des dégâts infligés que l'attaquant se reprend en retour. */
+  recoil?: number;
+  /** Part des dégâts infligés que l'attaquant récupère en PV. */
+  drain?: number;
+  /** Frappe entre deux et cinq fois, chaque coup compté à part. */
+  multi?: true;
+  /** Installe une météo pour quelques tours. */
+  weather?: Weather;
 };
+
+export type Weather = "pluie" | "soleil" | "sable";
 
 const MOVE_DATA = {
   charge: { name: "Charge", type: "normal", category: "physique", power: 50, accuracy: 100, pp: 35 },
@@ -179,6 +189,20 @@ const MOVE_DATA = {
   "ecras-face": { name: "Écras'Face", type: "normal", category: "physique", power: 40, accuracy: 100, pp: 15, flinch: 0.3 },
   "morsure-peur": { name: "Croc de Mort", type: "dark", category: "physique", power: 65, accuracy: 95, pp: 15, flinch: 0.2 },
   "feu-follet": { name: "Feu Follet", type: "fire", category: "statut", power: 0, accuracy: 85, pp: 15, inflicts: { status: "brulure", chance: 1 } },
+
+  // Le contrecoup, le vol de PV et les coups multiples : des paliers de
+  // puissance qui se paient, plutôt que des chiffres plus gros.
+  belier: { name: "Bélier", type: "normal", category: "physique", power: 90, accuracy: 85, pp: 20, recoil: 0.25 },
+  damocles: { name: "Damoclès", type: "normal", category: "physique", power: 120, accuracy: 100, pp: 15, recoil: 0.33 },
+  "vol-vie": { name: "Vol-Vie", type: "grass", category: "speciale", power: 75, accuracy: 100, pp: 10, drain: 0.5 },
+  "vampi-baiser": { name: "Vampi-Baiser", type: "psychic", category: "speciale", power: 50, accuracy: 100, pp: 10, drain: 0.5 },
+  furie: { name: "Furie", type: "normal", category: "physique", power: 18, accuracy: 85, pp: 20, multi: true },
+  "dard-venin": { name: "Dard-Venin", type: "bug", category: "physique", power: 25, accuracy: 95, pp: 20, multi: true },
+
+  // La météo, posée pour cinq tours.
+  "danse-pluie": { name: "Danse Pluie", type: "water", category: "statut", power: 0, accuracy: 100, pp: 5, weather: "pluie" },
+  zenith: { name: "Zénith", type: "fire", category: "statut", power: 0, accuracy: 100, pp: 5, weather: "soleil" },
+  "tempete-sable": { name: "Tempête de Sable", type: "rock", category: "statut", power: 0, accuracy: 100, pp: 10, weather: "sable" },
 } as const satisfies Record<string, Move>;
 
 export type MoveId = keyof typeof MOVE_DATA;
@@ -666,6 +690,23 @@ const BUFF_BY_TYPE = (() => {
 /** Niveau à partir duquel elle sait aussi se renforcer. */
 const BUFF_LEVEL = 25;
 
+/**
+ * Les attaques à contrecoup ou à coups multiples : puissantes mais coûteuses,
+ * elles n'arrivent qu'à un niveau où le Pokémon peut les encaisser.
+ */
+const RISKY_BY_TYPE = (() => {
+  const table: Partial<Record<TypeName, MoveId>> = {};
+  for (const id of Object.keys(MOVES) as MoveId[]) {
+    const mv = MOVES[id];
+    if (mv.category === "statut") continue;
+    if (!mv.recoil && !mv.drain && !mv.multi) continue;
+    table[mv.type] ??= id;
+  }
+  return table;
+})();
+
+const RISKY_LEVEL = 35;
+
 /** Le plafond de puissance qu'un niveau autorise. */
 const ceilingAt = (level: number) => 25 + level * 3;
 
@@ -699,6 +740,9 @@ export function typedMoveset(types: TypeName[], level: number): MoveId[] {
   // Plus tard encore, elle apprend à se renforcer avant de frapper.
   if (level >= BUFF_LEVEL) {
     for (const type of types) add(BUFF_BY_TYPE[type]);
+  }
+  if (level >= RISKY_LEVEL) {
+    for (const type of types) add(RISKY_BY_TYPE[type]);
   }
   for (const filler of ["vive-attaque", "plaquage", "charge"] as MoveId[]) {
     if (picks.length >= 4) break;

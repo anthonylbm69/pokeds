@@ -27,6 +27,8 @@ import {
   STARTERS,
   SLOTS,
   hasFlag,
+  towerFoe,
+  towerReward,
   slotInfo,
   sortedBox,
   type BoxOrder,
@@ -42,6 +44,7 @@ export type Then =
   | { do: "heal"; respawn: boolean }
   | { do: "trainer"; npc: string }
   | { do: "revanche"; npc: string }
+  | { do: "tour" }
   | { do: "statique"; npc: string }
   | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
@@ -72,6 +75,8 @@ export type Phase =
   | { kind: "pc"; on: "menu" | "retirer" | "deposer" | "ordre"; message: string | null }
   | { kind: "tri" }
   | { kind: "sauvegarde"; message: string | null }
+  | { kind: "tour" }
+  | { kind: "carte-dresseur" }
   | { kind: "battle"; ui: BattleUi };
 
 /** Les rayons, aux prix d'Unys. */
@@ -457,6 +462,78 @@ export function worldScreen(
       };
     }
 
+    if (phase.kind === "tour") {
+      const suivant = towerFoe(game.towerRun);
+      return {
+        title: "Tour de Combat",
+        hint: "A pour valider · B pour renoncer",
+        layout: "list",
+        list: [
+          {
+            id: "duel",
+            label: game.towerRun ? `DUEL N°${game.towerRun + 1}` : "COMMENCER UNE SÉRIE",
+            sub:
+              `${suivant.name} · ${suivant.team} Pokémon niveau ${suivant.level} ` +
+              `· ${towerReward(game.towerRun)} P`,
+            disabled: !game.party.some((m) => m.hp > 0),
+            tone: "fight" as const,
+          },
+          {
+            id: "serie",
+            label: `SÉRIE EN COURS : ${game.towerRun}`,
+            sub: `meilleure série : ${game.towerBest}`,
+            disabled: true,
+            tone: "plain" as const,
+          },
+          { id: "leave", label: "RENONCER", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "carte-dresseur") {
+      const insignes = game.flags.filter((f) => f.startsWith("insigne:")).length;
+      const heures = Math.floor(game.played / 3600);
+      const minutes = Math.floor((game.played % 3600) / 60);
+      return {
+        title: `Carte de ${game.name || "Dresseur"}`,
+        hint: "B pour fermer",
+        layout: "list",
+        list: [
+          {
+            id: "temps",
+            label: `Temps de jeu : ${heures} h ${String(minutes).padStart(2, "0")}`,
+            sub: `${game.money} P en poche`,
+            disabled: true,
+            tone: "party" as const,
+          },
+          {
+            id: "insignes",
+            label: `${insignes} insigne${insignes > 1 ? "s" : ""}`,
+            sub: hasFlag(game, "insigne:ligue") ? "Ligue Pokémon remportée" : "la Ligue vous attend",
+            disabled: true,
+            tone: "plain" as const,
+          },
+          {
+            id: "dex",
+            label: `${game.seen.length} espèces vues · ${game.caught.length} capturées`,
+            sub: `${game.party.length} sur vous, ${game.box.length} au PC`,
+            disabled: true,
+            tone: "plain" as const,
+          },
+          {
+            id: "duels",
+            label: `${game.wins} duel${game.wins > 1 ? "s" : ""} remporté${game.wins > 1 ? "s" : ""}`,
+            sub: game.towerBest
+              ? `meilleure série à la Tour : ${game.towerBest}`
+              : "la Tour de Combat vous attend",
+            disabled: true,
+            tone: "plain" as const,
+          },
+          { id: "leave", label: "FERMER", tone: "back" as const },
+        ],
+      };
+    }
+
     if (phase.kind === "sauvegarde") {
       const decrire = (info: SlotInfo, slot: number) =>
         info
@@ -541,7 +618,7 @@ export function worldScreen(
           sub: game.party.length ? `${game.party.length} Pokémon` : "—",
           disabled: !game.party.length,
         },
-        { id: "carte", label: "CARTE", sub: MOMENT_FR[momentNow()] },
+        { id: "carte", label: "RÉGION", sub: MOMENT_FR[momentNow()] },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X · emplacements et fichier" },
         { id: "music", label: "MUSIQUE", sub: game.music ? "activée" : "coupée" },
@@ -550,6 +627,12 @@ export function worldScreen(
           label: "SUIVEUR",
           sub: game.party.length ? (game.follower ? "au pied" : "au repos") : "—",
           disabled: !game.party.length,
+        },
+        {
+          id: "carte-dresseur",
+          label: "CARTE",
+          sub: "votre bilan",
+          tone: "plain" as const,
         },
         { id: "title", label: "TITRE", sub: "SELECT" },
       ],

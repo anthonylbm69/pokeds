@@ -7,6 +7,12 @@ import {
   giveStarter,
   giveHeld,
   takeHeld,
+  TOWER_BASE_LEVEL,
+  TOWER_MAX_TEAM,
+  towerFoe,
+  towerLose,
+  towerReward,
+  towerWin,
   hasSave,
   importSave,
   loadGame,
@@ -256,5 +262,86 @@ describe("les objets tenus", () => {
     expect("erreur" in lu).toBe(false);
     if ("erreur" in lu) return;
     expect(lu.state.party[0].held).toBe("restes");
+  });
+});
+
+describe("la Tour de Combat", () => {
+  it("monte d'un niveau à chaque duel, et d'un Pokémon tous les trois", () => {
+    expect(towerFoe(0).level).toBe(TOWER_BASE_LEVEL);
+    expect(towerFoe(0).team).toBe(1);
+    expect(towerFoe(1).level).toBe(TOWER_BASE_LEVEL + 1);
+    expect(towerFoe(3).team).toBe(2);
+    expect(towerFoe(6).team).toBe(3);
+  });
+
+  it("plafonne le niveau et l'effectif", () => {
+    expect(towerFoe(200).level).toBe(100);
+    expect(towerFoe(200).team).toBe(TOWER_MAX_TEAM);
+  });
+
+  it("donne un nom à chaque adversaire, et les fait tourner", () => {
+    const noms = new Set(Array.from({ length: 12 }, (_, i) => towerFoe(i).name));
+    expect(noms.size).toBeGreaterThan(5);
+    for (const i of [0, 5, 40]) expect(towerFoe(i).name.length).toBeGreaterThan(0);
+  });
+
+  it("paie de plus en plus", () => {
+    expect(towerReward(1)).toBeGreaterThan(towerReward(0));
+    expect(towerReward(10)).toBeGreaterThan(towerReward(1));
+  });
+
+  it("allonge la série et retient le record", () => {
+    let state = { ...newGame("Test"), money: 0 };
+    state = towerWin(state);
+    expect(state.towerRun).toBe(1);
+    expect(state.towerBest).toBe(1);
+    expect(state.wins).toBe(1);
+    expect(state.money).toBe(towerReward(0));
+
+    state = towerWin(state);
+    expect(state.towerRun).toBe(2);
+    expect(state.towerBest).toBe(2);
+  });
+
+  it("remet la série à zéro sans effacer le record", () => {
+    let state = towerWin(towerWin(newGame("Test")));
+    const record = state.towerBest;
+    state = towerLose(state);
+    expect(state.towerRun).toBe(0);
+    expect(state.towerBest).toBe(record);
+  });
+
+  it("ne reprend jamais une série en cours après un rechargement", () => {
+    const avec = { ...towerWin(newGame("Test")), towerRun: 7 };
+    saveGame(avec, 1);
+    const relu = loadGame(1);
+    expect(relu?.towerRun).toBe(0);
+    // Le record, lui, survit.
+    expect(relu?.towerBest).toBe(avec.towerBest);
+  });
+});
+
+describe("les compteurs de la carte de Dresseur", () => {
+  it("partent de zéro", () => {
+    const neuf = newGame("Test");
+    expect(neuf.played).toBe(0);
+    expect(neuf.wins).toBe(0);
+    expect(neuf.towerBest).toBe(0);
+  });
+
+  it("survivent à l'aller-retour par un fichier", () => {
+    const avant = { ...newGame("Test"), played: 7200, wins: 42, towerBest: 9 };
+    const lu = importSave(exportSave(avant));
+    expect("erreur" in lu).toBe(false);
+    if ("erreur" in lu) return;
+    expect(lu.state.played).toBe(7200);
+    expect(lu.state.wins).toBe(42);
+    expect(lu.state.towerBest).toBe(9);
+  });
+
+  it("se remplissent à zéro pour une partie d'avant", () => {
+    const state = reviveGame({ ...newGame("Test"), played: undefined, wins: undefined });
+    expect(state?.played).toBe(0);
+    expect(state?.wins).toBe(0);
   });
 });

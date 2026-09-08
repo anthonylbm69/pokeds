@@ -43,7 +43,9 @@ export type BattleUi = {
   origin:
     | { kind: "sauvage"; npc?: string }
     // `revanche` distingue le second duel : il ne se rejoue pas une fois gagné.
-    | { kind: "dresseur"; npc: string; revanche?: boolean };
+    // `revanche` distingue le second duel ; `tour` les séries de la Tour de
+    // Combat, qui tiennent leurs propres comptes.
+    | { kind: "dresseur"; npc: string; revanche?: boolean; tour?: boolean };
 };
 
 /** Le premier remplaçant en état de se battre. */

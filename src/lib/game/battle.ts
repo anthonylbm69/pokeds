@@ -7,6 +7,7 @@
 import {
   MAX_LEVEL,
   MOVES,
+  type Weather,
   effectiveness,
   computeStat,
   expForLevel,
@@ -83,6 +84,28 @@ export const statusBonus = (status: Status | null): number =>
 
 /** Part des PV maximum perdue par tour sous poison ou brûlure. */
 const RESIDU = 1 / 8;
+
+/** Combien de tours dure une météo installée. */
+const WEATHER_TURNS = 5;
+
+export const WEATHER_FR: Record<Weather, string> = {
+  pluie: "La pluie tombe.",
+  soleil: "Le soleil brille de mille feux.",
+  sable: "Une tempête de sable se lève.",
+};
+
+/**
+ * Ce que le temps fait aux dégâts : la pluie nourrit l'Eau et étouffe le
+ * Feu, le soleil fait l'inverse. Le sable, lui, ne change que les PV.
+ */
+function weatherMult(kind: Weather | undefined, type: TypeName): number {
+  if (kind === "pluie") return type === "water" ? 1.5 : type === "fire" ? 0.5 : 1;
+  if (kind === "soleil") return type === "fire" ? 1.5 : type === "water" ? 0.5 : 1;
+  return 1;
+}
+
+/** Les types que la tempête de sable épargne. */
+const SABLE_IMMUNE: TypeName[] = ["rock", "ground", "steel"];
 
 /**
  * Une rencontre sur dix. Les jeux d'origine sont infiniment plus avares —
@@ -346,6 +369,8 @@ export type BattleState = {
   mustSwitch: boolean;
   /** Camp qui recule ce tour-ci, s'il n'avait pas encore joué. */
   flinched?: "mine" | "foe";
+  /** Temps qu'il fait, et pour combien de tours encore. */
+  weather?: { kind: Weather; turns: number };
   runAttempts: number;
 };
 
@@ -414,6 +439,7 @@ function computeHit(
   defender: Mon,
   defenderStages: Stages,
   moveId: MoveId,
+  weather?: Weather,
 ): Hit {
   const mv = MOVES[moveId];
   const accuracy = mv.accuracy * accMult(attackerStages.acc);
@@ -450,6 +476,7 @@ function computeHit(
   // Ce que l'attaquant porte enfle le coup ; ce que la cible porte l'amortit.
   const porte = holdRules(attacker.held).power ?? 1;
   const amorti = holdRules(defender.held).guard ?? 1;
+  const temps = weatherMult(weather, mv.type);
   // Engrais, Brasier, Torrent et Essaim : le dos au mur, on frappe plus fort.
   const acule =
     talent.pinch === mv.type && attacker.hp <= maxHp(attacker) * PINCH ? 1.5 : 1;
@@ -463,7 +490,9 @@ function computeHit(
   return {
     damage: Math.max(
       1,
-      Math.floor((base * stab * eff * acule * porte * (crit ? 2 : 1) * variance) / amorti),
+      Math.floor(
+        (base * stab * eff * acule * porte * temps * (crit ? 2 : 1) * variance) / amorti,
+      ),
     ),
     eff,
     crit,
@@ -496,6 +525,7 @@ function applyMove(
     defender,
     fromPlayer ? state.foeStages : state.playerStages,
     slot.id,
+    state.weather?.kind,
   );
 
   if (hit.missed) {
@@ -508,6 +538,11 @@ function applyMove(
   }
 
   if (mv.category === "statut") {
+    if (mv.weather) {
+      state.weather = { kind: mv.weather, turns: WEATHER_TURNS };
+      messages.push(WEATHER_FR[mv.weather]);
+      return;
+    }
     if (mv.raise) {
       const stages = fromPlayer ? state.playerStages : state.foeStages;
       if (stages[mv.raise.stat] >= 6) {
@@ -541,14 +576,34 @@ function applyMove(
     return;
   }
 
+  // Une attaque à répétition frappe deux à cinq fois ; chaque coup compte.
+  const coups = mv.multi ? 2 + roll(4) : 1;
+  const inflige = hit.damage * coups;
+
   // Garde-Robe : depuis le maximum, on encaisse tout et il reste un PV.
   const garde = abilityRules(defender.id).sturdy;
-  const survit = garde && defender.hp === maxHp(defender) && hit.damage >= defender.hp;
-  defender.hp = Math.max(survit ? 1 : 0, defender.hp - hit.damage);
+  const survit = garde && defender.hp === maxHp(defender) && inflige >= defender.hp;
+  const avant = defender.hp;
+  defender.hp = Math.max(survit ? 1 : 0, defender.hp - inflige);
+  const porte = avant - defender.hp;
+  if (coups > 1) messages.push(`Touché ${coups} fois !`);
   if (hit.crit) messages.push("Coup critique !");
   if (survit) messages.push(`${who(defender, !fromPlayer)} tient bon grâce à son talent !`);
   const word = effWord(hit.eff);
   if (word) messages.push(word);
+  // Le vol de PV et le contrecoup se calculent sur ce qui a réellement porté.
+  if (mv.drain && porte > 0) {
+    const vole = Math.max(1, Math.floor(porte * mv.drain));
+    attacker.hp = Math.min(maxHp(attacker), attacker.hp + vole);
+    messages.push(`${who(attacker, fromPlayer)} absorbe l'énergie de son adversaire.`);
+  }
+  if (mv.recoil && porte > 0) {
+    const retour = Math.max(1, Math.floor(porte * mv.recoil));
+    attacker.hp = Math.max(0, attacker.hp - retour);
+    messages.push(`${who(attacker, fromPlayer)} accuse le contrecoup !`);
+    if (isKo(attacker)) messages.push(`${who(attacker, fromPlayer)} est K.O. !`);
+  }
+
   if (isKo(defender)) {
     messages.push(`${who(defender, !fromPlayer)} est K.O. !`);
     return;
@@ -941,6 +996,35 @@ function endOfTurn(state: BattleState, messages: string[]): void {
   // L'objet tenu passe après les altérations : une Baie sauve encore.
   heldTick(mine, true, messages);
   heldTick(state.foe, false, messages);
+
+  weatherTick(state, messages);
+}
+
+/**
+ * Le temps s'écoule : la tempête de sable gratte ceux qu'elle n'épargne pas,
+ * puis la météo se dissipe au bout de quelques tours.
+ */
+function weatherTick(state: BattleState, messages: string[]): void {
+  if (!state.weather) return;
+
+  if (state.weather.kind === "sable") {
+    for (const [mon, mine] of [
+      [activeMon(state), true],
+      [state.foe, false],
+    ] as [Mon, boolean][]) {
+      if (isKo(mon) || typesOf(mon).some((t) => SABLE_IMMUNE.includes(t))) continue;
+      const perte = Math.max(1, Math.floor(maxHp(mon) / 16));
+      mon.hp = Math.max(0, mon.hp - perte);
+      messages.push(`${who(mon, mine)} est fouetté par le sable !`);
+      if (isKo(mon)) messages.push(`${who(mon, mine)} est K.O. !`);
+    }
+  }
+
+  state.weather.turns -= 1;
+  if (state.weather.turns <= 0) {
+    state.weather = undefined;
+    messages.push("Le temps redevient normal.");
+  }
 }
 
 /* -------------------------------------------------------------- capture */

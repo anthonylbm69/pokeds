@@ -17,7 +17,7 @@ export type MapId =
   | "route5" | "route6" | "mions" | "centre4" | "arene3" | "maison4"
   | "route7" | "route8" | "ligue" | "centre5"
   | "ligue1" | "ligue2" | "ligue3" | "ligue4" | "ligue5"
-  | "grotte";
+  | "grotte" | "tour";
 
 export type TileKind =
   | "grass" | "tall" | "path" | "flower" | "tree" | "water"
@@ -84,6 +84,8 @@ export type NpcSpec = {
   mon?: { id: number; level: number; shiny?: boolean; floats?: boolean };
   /** Marqueurs exigés pour que ce personnage soit là : il n'existe pas avant. */
   needs?: string[];
+  /** Tient le comptoir de la Tour de Combat. */
+  tower?: boolean;
   lines: string[];
   trainer?: TrainerSpec;
   /** Soigne l'équipe après la réplique. */
@@ -1699,8 +1701,8 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##..WWWWWDDWWWWW..##",
       "##.......==.......##",
       "##.......==U......##",
-      "##..TTTT.==.......##",
-      "##..WWDW.==.......##",
+      "##..TTTT.==..TTTT.##",
+      "##..WWDW.==..WWDW.##",
       "##.......==.......##",
       "##..S....==.......##",
       "##.......==.......##",
@@ -1726,6 +1728,20 @@ export const MAPS: Record<MapId, MapSpec> = {
     warps: [
       { x: 9, y: 15, to: "route8", tx: 9, ty: 1, dir: "down" },
       { x: 10, y: 15, to: "route8", tx: 10, ty: 1, dir: "down" },
+      // La Tour de Combat, ouverte une fois Eren battu.
+      {
+        x: 15,
+        y: 8,
+        to: "tour",
+        tx: 5,
+        ty: 7,
+        dir: "up",
+        needs: ["insigne:ligue"],
+        refusal: [
+          "La porte de la Tour de Combat reste close.",
+          "« Revenez quand vous aurez battu le Conseil 4. »",
+        ],
+      },
       {
         x: 9,
         y: 4,
@@ -2238,6 +2254,57 @@ export const MAPS: Record<MapId, MapSpec> = {
       },
     ],
   },
+
+  /**
+   * La Tour de Combat : une salle nue, un comptoir, et une hôtesse qui
+   * enchaîne les duels tant qu'on gagne. Rien à explorer — tout est dans
+   * la série.
+   */
+  tour: {
+    name: "Tour de Combat",
+    indoor: true,
+    tiles: [
+      "XXXXXXXXXXXX",
+      "X-CCCCCCCC-X",
+      "X-CCCCCCCC-X",
+      "X----------X",
+      "X-B------B-X",
+      "X----------X",
+      "X----------X",
+      "X----------X",
+      "XXXXXDDXXXXX",
+    ],
+    npcs: [
+      {
+        id: "hotesse-tour",
+        x: 5,
+        y: 3,
+        dir: "down",
+        sprite: "infirmiere",
+        tower: true,
+        lines: [
+          "Bienvenue à la Tour de Combat !",
+          "Ici, les duels s'enchaînent et les adversaires montent avec vous.",
+          "Une défaite et la série repart de zéro. Prêt ?",
+        ],
+      },
+    ],
+    warps: [
+      { x: 5, y: 8, to: "ligue", tx: 15, ty: 9, dir: "down" },
+      { x: 6, y: 8, to: "ligue", tx: 15, ty: 9, dir: "down" },
+    ],
+    signs: [
+      {
+        x: 9,
+        y: 4,
+        text: [
+          "Règlement de la Tour.",
+          "« Les adversaires gagnent un niveau à chaque duel remporté, et un",
+          "Pokémon de plus tous les trois. La série ne se garde pas. »",
+        ],
+      },
+    ],
+  },
 };
 
 /* ------------------------------------------------- la carte de la région */
@@ -2289,7 +2356,7 @@ export const REGION: RegionNode[] = [
     kind: "ville",
     biome: "montagne",
     x: 86, y: 6,
-    inside: ["centre5", "ligue1", "ligue2", "ligue3", "ligue4", "ligue5"],
+    inside: ["centre5", "ligue1", "ligue2", "ligue3", "ligue4", "ligue5", "tour"],
   },
 ];
 

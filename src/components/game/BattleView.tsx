@@ -5,6 +5,7 @@ import { expForLevel, species } from "@/lib/game/data";
 import {
   STATUS_FR,
   STATUS_TAG,
+  WEATHER_FR,
   activeMon,
   maxHp,
   type BattleState,
@@ -96,6 +97,11 @@ export default function BattleView({ state, message, throwing, trainerSprite }: 
   return (
     <div className="battle">
       <div className="battle__field">
+        {state.weather && (
+          <span className={`meteo meteo--${state.weather.kind}`}>
+            {WEATHER_FR[state.weather.kind]}
+          </span>
+        )}
         <div className="battle__slot battle__slot--foe">
           <span className="battle__pad" />
           {trainerSprite ? (

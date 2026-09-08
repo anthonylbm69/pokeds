@@ -92,3 +92,25 @@ describe.each(Object.entries(TRACKS))("piste %s", (name, track) => {
     expect(track.tempo).toBeLessThanOrEqual(220);
   });
 });
+
+describe("les lieux ajoutés", () => {
+  it("ont leur propre piste", () => {
+    expect(trackForMap("grotte")).toBe("grotte");
+    expect(TRACKS.grotte).toBeDefined();
+    expect(TRACKS.surf).toBeDefined();
+  });
+
+  it("laissent la houle primer sur la carte quand on nage", () => {
+    expect(trackForMap("bourg", true)).toBe("surf");
+    expect(trackForMap("route1", true)).toBe("surf");
+    // À pied, la carte reprend ses droits.
+    expect(trackForMap("route1", false)).toBe("route");
+  });
+
+  it("ne changent rien aux lieux déjà servis", () => {
+    expect(trackForMap("arene2")).toBe("dresseur");
+    expect(trackForMap("ligue3")).toBe("ligue");
+    expect(trackForMap("route5")).toBe("desert");
+    expect(trackForMap("bourg")).toBe("ville");
+  });
+});

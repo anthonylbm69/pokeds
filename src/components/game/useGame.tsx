@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import { atNight, momentNow } from "@/lib/game/heure";
+import { WILD_POOL } from "@/lib/game/dex";
 import {
   MAX_LEVEL,
   species,
@@ -64,6 +65,10 @@ import {
   giveHeld,
   takeHeld,
   teachMove,
+  towerFoe,
+  towerLose,
+  towerReward,
+  towerWin,
   withDreamTeam,
   withdrawMon,
   withFlag,
@@ -177,6 +182,16 @@ export function useGame({
     setPhase({ kind: "intro", step: 0 });
   }, []);
 
+  // Le temps de jeu, compté à la minute tant que la console est allumée.
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(
+      () => setGame((g) => ({ ...g, played: g.played + 60 })),
+      60_000,
+    );
+    return () => window.clearInterval(id);
+  }, [active]);
+
   /* ------------------------------------------------------------- PNJ */
 
   const map = MAPS[game.map];
@@ -243,6 +258,10 @@ export function useGame({
           i: 0,
           then: { do: "revanche", npc: npc.id },
         });
+        return;
+      }
+      if (npc.tower) {
+        setPhase({ kind: "text", lines: npc.lines, i: 0, then: { do: "tour" } });
         return;
       }
       if (npc.starter) {
@@ -417,6 +436,32 @@ export function useGame({
     [game, npcById, openBattle],
   );
 
+  /**
+   * Un duel de la Tour. L'adversaire est tiré au sort dans le Pokédex, à un
+   * niveau et un effectif qui montent avec la série.
+   */
+  const startTowerBattle = useCallback(() => {
+    const foe = towerFoe(game.towerRun);
+    const team = Array.from({ length: foe.team }, () =>
+      createMon(WILD_POOL[Math.floor(Math.random() * WILD_POOL.length)], foe.level),
+    );
+    const state = startTrainer(
+      game.party,
+      team,
+      { name: foe.name, title: "As de la Tour", reward: towerReward(game.towerRun) },
+      game.bag,
+    );
+    openBattle(
+      state,
+      [
+        `Duel n°${game.towerRun + 1} — ${foe.name} entre en lice !`,
+        `${foe.name} envoie ${state.foe.name} !`,
+        `En avant, ${activeMon(state).name} !`,
+      ],
+      { kind: "dresseur", npc: "hotesse-tour", tour: true },
+    );
+  }, [game, openBattle]);
+
   /** Range le combat : équipe, sac, récompense, puis retour au monde. */
   const finishBattle = useCallback(
     (ui: BattleUi) => {
@@ -449,6 +494,26 @@ export function useGame({
         (s.outcome === "victoire" || s.outcome === "capture")
       ) {
         next = withFlag(next, `battu:${ui.origin.npc}`);
+      }
+
+      // La Tour tient ses propres comptes : ni drapeau, ni PNJ battu.
+      if (ui.origin.kind === "dresseur" && ui.origin.tour) {
+        if (s.outcome === "victoire") {
+          next = towerWin(next);
+          lines.push(
+            `Série de ${next.towerRun} ! ${towerReward(next.towerRun - 1)} P vous sont remis.`,
+          );
+        } else if (s.outcome === "defaite") {
+          next = towerLose(next);
+          lines.push("La série s'arrête là. Le record, lui, reste acquis.");
+        }
+        setGame(next);
+        setPhase(
+          s.outcome === "victoire"
+            ? { kind: "text", lines, i: 0, then: { do: "tour" } }
+            : { kind: "text", lines, i: 0, then: null },
+        );
+        return;
       }
 
       if (s.outcome === "victoire" && ui.origin.kind === "dresseur") {
@@ -835,6 +900,10 @@ export function useGame({
         case "statique":
           startStaticBattle(then.npc);
           break;
+        case "tour":
+          setCursor(0);
+          setPhase({ kind: "tour" });
+          break;
         case "revanche":
           startTrainerBattle(then.npc, true);
           break;
@@ -1081,6 +1150,17 @@ export function useGame({
         return;
       }
 
+      if (phase.kind === "tour") {
+        if (choice.id === "duel") startTowerBattle();
+        else setPhase({ kind: "world" });
+        return;
+      }
+
+      if (phase.kind === "carte-dresseur") {
+        setPhase({ kind: "world" });
+        return;
+      }
+
       if (phase.kind === "sauvegarde") {
         if (choice.id === "leave") {
           setPhase({ kind: "world" });
@@ -1263,6 +1343,9 @@ export function useGame({
         if (choice.id === "sac") {
           setCursor(0);
           setPhase({ kind: "sac", on: "objets", message: null });
+        } else if (choice.id === "carte-dresseur") {
+          setCursor(0);
+          setPhase({ kind: "carte-dresseur" });
         } else if (choice.id === "equipe") {
           setCursor(0);
           setPhase({ kind: "equipe" });
@@ -1274,7 +1357,7 @@ export function useGame({
         else if (choice.id === "title") onExit();
       }
     },
-    [choices, phase, game, battleUi, draftName, chooseStarter, runTurn, save, saveTo, downloadSave, uploadSave, buy, onOpenDex, onExit],
+    [choices, phase, game, battleUi, draftName, chooseStarter, runTurn, startTowerBattle, save, saveTo, downloadSave, uploadSave, buy, onOpenDex, onExit],
   );
 
   const moveCursor = useCallback(
@@ -1332,6 +1415,14 @@ export function useGame({
           return;
 
         case "shop":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") setPhase({ kind: "world" });
+          return;
+
+        case "tour":
+        case "carte-dresseur":
           if (button === "up") moveCursor(0, -1);
           else if (button === "down") moveCursor(0, 1);
           else if (button === "a") pick(cursor);
@@ -1446,8 +1537,8 @@ export function useGame({
     if (phase.kind === "battle") {
       return phase.ui.origin.kind === "dresseur" ? "dresseur" : "combat";
     }
-    return trackForMap(game.map);
-  }, [phase, game.map]);
+    return trackForMap(game.map, game.surfing);
+  }, [phase, game.map, game.surfing]);
 
   useEffect(() => {
     if (!active) {
@@ -1613,6 +1704,8 @@ export function useGame({
       phase.kind === "equipe" ||
       phase.kind === "tri" ||
       phase.kind === "sauvegarde" ||
+      phase.kind === "tour" ||
+      phase.kind === "carte-dresseur" ||
       phase.kind === "fiche" ||
       phase.kind === "surnom" ||
       phase.kind === "bus" ||

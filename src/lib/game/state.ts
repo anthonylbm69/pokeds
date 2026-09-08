@@ -47,6 +47,13 @@ export type GameState = {
   surfing: boolean;
   /** Comment la boîte du PC est rangée à l'affichage. */
   boxOrder: BoxOrder;
+  /** Secondes de jeu accumulées, pour la carte de Dresseur. */
+  played: number;
+  /** Duels remportés, toutes catégories confondues. */
+  wins: number;
+  /** Meilleure série à la Tour de Combat, et série en cours. */
+  towerBest: number;
+  towerRun: number;
   /** Starter reçu : l'Arène s'en sert pour composer son équipe. */
   starter?: number;
   /** Événements franchis : starter reçu, dresseurs battus… */
@@ -143,6 +150,10 @@ export function newGame(name: string): GameState {
     follower: true,
     surfing: false,
     boxOrder: "arrivee",
+    played: 0,
+    wins: 0,
+    towerBest: 0,
+    towerRun: 0,
     flags: [],
     seen: [],
     caught: [],
@@ -342,6 +353,49 @@ export function takeHeld(
     message: `${mon.name} rend ${ITEMS[item].name}.`,
   };
 }
+
+/* ------------------------------------------------------- Tour de Combat */
+
+/**
+ * Les adversaires de la Tour montent avec la série : chaque victoire ajoute
+ * un niveau et, tous les trois duels, un Pokémon de plus dans leur équipe.
+ */
+export const TOWER_BASE_LEVEL = 50;
+export const TOWER_MAX_TEAM = 3;
+
+export type TowerFoe = { name: string; level: number; team: number };
+
+const TOWER_NAMES = [
+  "Nadia", "Bruno", "Lise", "Karim", "Ines", "Mathis",
+  "Sofia", "Yann", "Claire", "Ugo", "Nora", "Elias",
+];
+
+/** L'adversaire du duel numéro `run` — le premier duel porte le numéro zéro. */
+export function towerFoe(run: number): TowerFoe {
+  return {
+    name: TOWER_NAMES[run % TOWER_NAMES.length],
+    level: Math.min(100, TOWER_BASE_LEVEL + run),
+    team: Math.min(TOWER_MAX_TEAM, 1 + Math.floor(run / 3)),
+  };
+}
+
+/** Ce que rapporte une victoire à la Tour : de plus en plus. */
+export const towerReward = (run: number) => 1000 + run * 500;
+
+/** Enregistre une victoire à la Tour, et retient la meilleure série. */
+export function towerWin(state: GameState): GameState {
+  const towerRun = state.towerRun + 1;
+  return {
+    ...state,
+    towerRun,
+    towerBest: Math.max(state.towerBest, towerRun),
+    wins: state.wins + 1,
+    money: state.money + towerReward(state.towerRun),
+  };
+}
+
+/** Une défaite remet la série à zéro ; le record, lui, reste acquis. */
+export const towerLose = (state: GameState): GameState => ({ ...state, towerRun: 0 });
 
 /* -------------------------------------------------------------------- PC */
 
@@ -572,6 +626,11 @@ export function reviveGame(brut: unknown): GameState | null {
       // On ne reprend jamais une partie au milieu de l'eau.
       surfing: false,
       boxOrder: data.boxOrder ?? "arrivee",
+      played: data.played ?? 0,
+      wins: data.wins ?? 0,
+      towerBest: data.towerBest ?? 0,
+      // Une série en cours ne survit pas à un rechargement : on repart de zéro.
+      towerRun: 0,
       box: (data.box ?? []).map((mon) => ({
         ...mon,
         shiny: mon.shiny ?? false,
