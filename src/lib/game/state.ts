@@ -51,6 +51,8 @@ export type GameState = {
   played: number;
   /** Duels remportés, toutes catégories confondues. */
   wins: number;
+  /** Les sacres inscrits au Panthéon, du plus ancien au plus récent. */
+  hall: HallEntry[];
   /** Meilleure série à la Tour de Combat, et série en cours. */
   towerBest: number;
   towerRun: number;
@@ -152,6 +154,7 @@ export function newGame(name: string): GameState {
     boxOrder: "arrivee",
     played: 0,
     wins: 0,
+    hall: [],
     towerBest: 0,
     towerRun: 0,
     flags: [],
@@ -352,6 +355,56 @@ export function takeHeld(
     },
     message: `${mon.name} rend ${ITEMS[item].name}.`,
   };
+}
+
+/* ------------------------------------------------------------ Panthéon */
+
+/**
+ * Un sacre : l'équipe telle qu'elle était le jour où elle a battu la Ligue.
+ * On en garde une copie figée plutôt qu'une référence — ces Pokémon vont
+ * continuer à évoluer, le souvenir, lui, ne doit pas bouger.
+ */
+export type HallEntry = {
+  /** Date du sacre, au format ISO. */
+  date: string;
+  /** Temps de jeu à cet instant, en secondes. */
+  played: number;
+  badges: number;
+  team: { id: number; name: string; level: number; shiny: boolean }[];
+};
+
+/** Inscrit l'équipe au Panthéon. Un même dresseur peut y revenir. */
+export function enterHallOfFame(state: GameState): GameState {
+  const entree: HallEntry = {
+    date: new Date().toISOString(),
+    played: state.played,
+    badges: state.flags.filter((f) => f.startsWith("insigne:")).length,
+    team: state.party.map((mon) => ({
+      id: mon.id,
+      name: mon.name,
+      level: mon.level,
+      shiny: mon.shiny,
+    })),
+  };
+  return { ...state, hall: [...state.hall, entree] };
+}
+
+/** La date d'un sacre, écrite en toutes lettres. */
+export function hallDate(entry: HallEntry): string {
+  const quand = new Date(entry.date);
+  if (Number.isNaN(quand.getTime())) return "date inconnue";
+  return quand.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Le temps de jeu d'un sacre, en heures et minutes. */
+export function hallTime(seconds: number): string {
+  const heures = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${heures} h ${String(minutes).padStart(2, "0")}`;
 }
 
 /* ------------------------------------------------------- Tour de Combat */
@@ -628,6 +681,9 @@ export function reviveGame(brut: unknown): GameState | null {
       boxOrder: data.boxOrder ?? "arrivee",
       played: data.played ?? 0,
       wins: data.wins ?? 0,
+      // Un sacre bricolé à la main ne doit pas casser l'écran : on ne garde
+      // que les entrées qui ont bien une équipe.
+      hall: (data.hall ?? []).filter((e) => Array.isArray(e?.team)),
       towerBest: data.towerBest ?? 0,
       // Une série en cours ne survit pas à un rechargement : on repart de zéro.
       towerRun: 0,

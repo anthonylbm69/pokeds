@@ -2747,7 +2747,9 @@ body::before {
 
 .pad__body {
   flex: 1;
-  min-height: 0;
+  /* Une vignette d'équipe fait trente pixels : en réserver une entière évite
+     que le menu ne coupe la liste au milieu d'une ligne. */
+  min-height: 34px;
   overflow-y: auto;
 }
 
@@ -2825,10 +2827,17 @@ body::before {
 .pad__choices {
   display: grid;
   gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .pad__choices--grid {
   grid-template-columns: 1fr 1fr;
+}
+
+/* Au-delà de six entrées, la grille se resserre pour tenir sur la dalle. */
+.pad__choices--grid .cmd {
+  padding-block: 6px;
 }
 
 .pad__choices--list {
@@ -2918,6 +2927,7 @@ body::before {
 }
 
 .pad__hint {
+  flex-shrink: 0;
   text-align: center;
   font-size: 10px;
   letter-spacing: 0.04em;

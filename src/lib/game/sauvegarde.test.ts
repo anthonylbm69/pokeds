@@ -13,6 +13,9 @@ import {
   towerLose,
   towerReward,
   towerWin,
+  enterHallOfFame,
+  hallDate,
+  hallTime,
   hasSave,
   importSave,
   loadGame,
@@ -343,5 +346,99 @@ describe("les compteurs de la carte de Dresseur", () => {
     const state = reviveGame({ ...newGame("Test"), played: undefined, wins: undefined });
     expect(state?.played).toBe(0);
     expect(state?.wins).toBe(0);
+  });
+});
+
+describe("le Panthéon", () => {
+  const sacree = (): GameState => {
+    const base = giveStarter(newGame("Anthony"), 495);
+    return {
+      ...withFlag(withFlag(base, "insigne:trio"), "insigne:ligue"),
+      party: [...base.party, createMon(500, 62, true)],
+      played: 12_600,
+    };
+  };
+
+  it("inscrit l'équipe, la date et le temps de jeu", () => {
+    const state = enterHallOfFame(sacree());
+    expect(state.hall).toHaveLength(1);
+
+    const entree = state.hall[0];
+    expect(entree.team).toHaveLength(2);
+    expect(entree.played).toBe(12_600);
+    expect(entree.badges).toBe(2);
+    expect(new Date(entree.date).getTime()).not.toBeNaN();
+  });
+
+  it("fige l'équipe : elle ne suit plus ce qui arrive ensuite", () => {
+    const avant = sacree();
+    const state = enterHallOfFame(avant);
+    // Le Pokémon continue sa vie ; le souvenir, lui, ne bouge pas.
+    const niveauInscrit = state.hall[0].team[0].level;
+    state.party[0].level = 99;
+    state.party[0].name = "Renommé";
+    expect(state.hall[0].team[0].level).toBe(niveauInscrit);
+    expect(state.hall[0].team[0].name).not.toBe("Renommé");
+  });
+
+  it("garde la livrée chromatique de chacun", () => {
+    const entree = enterHallOfFame(sacree()).hall[0];
+    expect(entree.team.some((m) => m.shiny)).toBe(true);
+  });
+
+  it("empile les sacres sans écraser les précédents", () => {
+    let state = enterHallOfFame(sacree());
+    state = enterHallOfFame({ ...state, played: 20_000 });
+    expect(state.hall).toHaveLength(2);
+    expect(state.hall[0].played).toBe(12_600);
+    expect(state.hall[1].played).toBe(20_000);
+  });
+
+  it("part vide pour une partie neuve", () => {
+    expect(newGame("Test").hall).toEqual([]);
+  });
+
+  it("survit à l'aller-retour par un fichier", () => {
+    const avant = enterHallOfFame(sacree());
+    const lu = importSave(exportSave(avant));
+    expect("erreur" in lu).toBe(false);
+    if ("erreur" in lu) return;
+    expect(lu.state.hall).toHaveLength(1);
+    expect(lu.state.hall[0].team[0].name).toBe(avant.hall[0].team[0].name);
+  });
+
+  it("écarte une entrée bricolée plutôt que de casser l'écran", () => {
+    const state = reviveGame({
+      ...sacree(),
+      hall: [{ date: "2026-01-01", played: 0, badges: 1, team: [] }, { date: "x" }, null],
+    });
+    // Seule celle qui a bien une équipe est gardée.
+    expect(state?.hall).toHaveLength(1);
+  });
+
+  it("se remplit à vide pour une partie d'avant", () => {
+    expect(reviveGame({ ...newGame("Test"), hall: undefined })?.hall).toEqual([]);
+  });
+});
+
+describe("l'affichage d'un sacre", () => {
+  it("écrit la date en toutes lettres", () => {
+    const texte = hallDate({ date: "2026-03-14T10:00:00.000Z", played: 0, badges: 0, team: [] });
+    expect(texte).toContain("2026");
+    expect(texte).toMatch(/[a-zéû]{3,}/);
+  });
+
+  it("ne bronche pas sur une date illisible", () => {
+    expect(hallDate({ date: "pas une date", played: 0, badges: 0, team: [] })).toContain(
+      "inconnue",
+    );
+  });
+
+  it("met le temps de jeu en heures et minutes", () => {
+    expect(hallTime(0)).toBe("0 h 00");
+    expect(hallTime(3600)).toBe("1 h 00");
+    expect(hallTime(12_600)).toBe("3 h 30");
+    // Les secondes qui traînent ne doivent pas déborder sur la minute.
+    expect(hallTime(3659)).toBe("1 h 00");
   });
 });

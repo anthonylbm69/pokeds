@@ -62,6 +62,7 @@ import {
   importSave,
   saveGame,
   applyItem,
+  enterHallOfFame,
   giveHeld,
   takeHeld,
   teachMove,
@@ -487,6 +488,9 @@ export function useGame({
 
       if (s.outcome === "victoire") music.play("victoire");
 
+      /** La Ligue vient de tomber : le texte se termine au Panthéon. */
+      let sacre = false;
+
       // Un Pokémon posté cède la place dès qu'il est vaincu ou capturé.
       if (
         ui.origin.kind === "sauvage" &&
@@ -524,6 +528,11 @@ export function useGame({
         if (npc?.trainer) {
           lines.push(...npc.trainer.defeat, ...npc.trainer.after);
           if (npc.trainer.badge) next = withFlag(next, `insigne:${npc.trainer.badge}`);
+          // Battre la Ligue vaut le sacre : on fige l'équipe du jour.
+          if (npc.trainer.badge === "ligue") {
+            next = enterHallOfFame(next);
+            sacre = true;
+          }
         }
       }
 
@@ -545,6 +554,10 @@ export function useGame({
 
       setGame(next);
       saveGame({ ...next, x: player.current.x, y: player.current.y, dir: player.current.dir });
+      if (sacre) {
+        setPhase({ kind: "text", lines, i: 0, then: { do: "pantheon" } });
+        return;
+      }
       setPhase(lines.length ? { kind: "text", lines, i: 0, then: null } : { kind: "world" });
     },
     [game, npcById],
@@ -904,6 +917,11 @@ export function useGame({
           setCursor(0);
           setPhase({ kind: "tour" });
           break;
+        case "pantheon":
+          setCursor(0);
+          // Le dernier inscrit est celui que l'on vient d'ajouter.
+          setPhase({ kind: "pantheon", index: Math.max(0, game.hall.length - 1) });
+          break;
         case "revanche":
           startTrainerBattle(then.npc, true);
           break;
@@ -1157,7 +1175,18 @@ export function useGame({
       }
 
       if (phase.kind === "carte-dresseur") {
+        if (choice.id === "pantheon") {
+          setCursor(0);
+          setPhase({ kind: "pantheon", index: Math.max(0, game.hall.length - 1) });
+          return;
+        }
         setPhase({ kind: "world" });
+        return;
+      }
+
+      if (phase.kind === "pantheon") {
+        setCursor(0);
+        setPhase({ kind: "carte-dresseur" });
         return;
       }
 
@@ -1421,6 +1450,19 @@ export function useGame({
           else if (button === "b") setPhase({ kind: "world" });
           return;
 
+        case "pantheon":
+          // Les flèches feuillettent les sacres, du premier au dernier.
+          if ((button === "left" || button === "right") && game.hall.length > 1) {
+            const pas = button === "right" ? 1 : -1;
+            const suivant =
+              (phase.index + pas + game.hall.length) % game.hall.length;
+            setPhase({ kind: "pantheon", index: suivant });
+          } else if (button === "a" || button === "b") {
+            setCursor(0);
+            setPhase({ kind: "carte-dresseur" });
+          }
+          return;
+
         case "tour":
         case "carte-dresseur":
           if (button === "up") moveCursor(0, -1);
@@ -1528,7 +1570,7 @@ export function useGame({
           return;
       }
     },
-    [active, phase, cursor, game.party.length, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
+    [active, phase, cursor, game.party.length, game.hall.length, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
   );
 
   /* ---------------------------------------------------------- musique */
@@ -1706,6 +1748,7 @@ export function useGame({
       phase.kind === "sauvegarde" ||
       phase.kind === "tour" ||
       phase.kind === "carte-dresseur" ||
+      phase.kind === "pantheon" ||
       phase.kind === "fiche" ||
       phase.kind === "surnom" ||
       phase.kind === "bus" ||

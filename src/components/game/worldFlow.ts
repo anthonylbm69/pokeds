@@ -26,6 +26,8 @@ import {
   PARTY_MAX,
   STARTERS,
   SLOTS,
+  hallDate,
+  hallTime,
   hasFlag,
   towerFoe,
   towerReward,
@@ -45,6 +47,7 @@ export type Then =
   | { do: "trainer"; npc: string }
   | { do: "revanche"; npc: string }
   | { do: "tour" }
+  | { do: "pantheon" }
   | { do: "statique"; npc: string }
   | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
@@ -77,6 +80,7 @@ export type Phase =
   | { kind: "sauvegarde"; message: string | null }
   | { kind: "tour" }
   | { kind: "carte-dresseur" }
+  | { kind: "pantheon"; index: number }
   | { kind: "battle"; ui: BattleUi };
 
 /** Les rayons, aux prix d'Unys. */
@@ -529,6 +533,58 @@ export function worldScreen(
             disabled: true,
             tone: "plain" as const,
           },
+          {
+            id: "pantheon",
+            label: game.hall.length
+              ? `PANTHÉON — ${game.hall.length} sacre${game.hall.length > 1 ? "s" : ""}`
+              : "PANTHÉON",
+            sub: game.hall.length ? "A pour revoir vos équipes" : "il reste à y entrer",
+            disabled: !game.hall.length,
+            tone: "fight" as const,
+          },
+          { id: "leave", label: "FERMER", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "pantheon") {
+      const total = game.hall.length;
+      const entree = game.hall[Math.min(phase.index, Math.max(0, total - 1))];
+      if (!entree) {
+        return {
+          title: "Panthéon",
+          hint: "B pour fermer",
+          layout: "list",
+          list: [{ id: "leave", label: "FERMER", tone: "back" as const }],
+        };
+      }
+      return {
+        title: `Panthéon — sacre n°${phase.index + 1} sur ${total}`,
+        hint:
+          total > 1
+            ? "◀ ▶ pour changer de sacre · B pour fermer"
+            : "B pour fermer",
+        layout: "list",
+        list: [
+          {
+            id: "quand",
+            label: hallDate(entree),
+            sub: `${hallTime(entree.played)} de jeu · ${entree.badges} insignes`,
+            disabled: true,
+            tone: "party" as const,
+          },
+          ...entree.team.map((mon, i) => ({
+            id: `sacre:${i}`,
+            label: `${mon.name}${mon.shiny ? " ✦" : ""}`,
+            // L'espèce n'est rappelée que sous un surnom : sinon elle
+            // répéterait le nom mot pour mot.
+            sub:
+              mon.name === species(mon.id).name
+                ? `Niveau ${mon.level}`
+                : `Niveau ${mon.level} · ${species(mon.id).name}`,
+            disabled: true,
+            tone: "plain" as const,
+          })),
           { id: "leave", label: "FERMER", tone: "back" as const },
         ],
       };
