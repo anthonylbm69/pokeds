@@ -9,6 +9,7 @@ import { hatch, walkDaycare, walkEggs } from "@/lib/game/elevage";
 import { MAX_LEVEL, species, type MoveId } from "@/lib/game/data";
 import {
   ITEM_ORDER,
+  add,
   countOf,
   ITEMS,
   ctMove,
@@ -33,6 +34,8 @@ import {
   STEP,
   busStopOf,
   followerSpot,
+  groundAt,
+  groundFlag,
   isWater,
   rollEncounter,
   rollWaterEncounter,
@@ -667,6 +670,31 @@ export function useGame({
           });
           return;
         }
+      }
+
+      // Un objet posé là, et pas encore ramassé.
+      const trouve = groundAt(current, x, y);
+      if (trouve && !hasFlag(game, groundFlag(game.map, x, y))) {
+        const combien = trouve.count ?? 1;
+        const next = withFlag(
+          { ...game, bag: add(game.bag, trouve.item, combien) },
+          groundFlag(game.map, x, y),
+        );
+        setGame(next);
+        // Une trouvaille s'enregistre sur place : elle ne se retrouve jamais.
+        saveGame({ ...next, x, y, dir: player.current.dir });
+        music.sfx("soin");
+        setPhase({
+          kind: "text",
+          lines: [
+            combien > 1
+              ? `Vous trouvez ${combien} ${ITEMS[trouve.item].name} par terre !`
+              : `Vous trouvez ${ITEMS[trouve.item].name} par terre !`,
+          ],
+          i: 0,
+          then: null,
+        });
+        return;
       }
 
       // Chaque pas fait avancer la Pension et rapproche les œufs portés. Sans

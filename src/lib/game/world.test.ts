@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SPECIES } from "./data";
 import { DEX, WILD_POOL } from "./dex";
+import { ITEMS } from "./items";
 import {
   BUS_STOPS,
   LOCAL_SHARE,
@@ -9,6 +10,8 @@ import {
   STEP,
   TILES,
   followerSpot,
+  groundAt,
+  groundFlag,
   regionNodeOf,
   rollEncounter,
   seesPlayer,
@@ -504,5 +507,113 @@ describe("les Pokémon postés sur une carte", () => {
         }
       }
     }
+  });
+});
+
+describe("les objets posés au sol", () => {
+  /** Tout ce que l'on peut atteindre à pied depuis une case de départ. */
+  const atteignables = (map: MapSpec, depart: { x: number; y: number }) => {
+    const vus = new Set<string>();
+    const file = [depart];
+    vus.add(`${depart.x},${depart.y}`);
+    while (file.length) {
+      const { x, y } = file.shift()!;
+      for (const { dx, dy } of Object.values(STEP)) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const clef = `${nx},${ny}`;
+        if (vus.has(clef)) continue;
+        const tile = tileAt(map, nx, ny);
+        // L'eau se traverse en Surf : elle ne coupe pas le monde en deux.
+        if (!tile || (tile.solid && !tile.swim)) continue;
+        vus.add(clef);
+        file.push({ x: nx, y: ny });
+      }
+    }
+    return vus;
+  };
+
+  /** Par où l'on entre sur cette carte : les arrivées des passages voisins. */
+  const entrees = (id: MapId) => {
+    const points: { x: number; y: number }[] = [];
+    for (const map of Object.values(MAPS)) {
+      for (const w of map.warps) {
+        if (w.to === id) points.push({ x: w.tx, y: w.ty });
+      }
+    }
+    return points;
+  };
+
+  const poses = maps.filter(([, map]) => (map.items?.length ?? 0) > 0);
+
+  it("se trouvent sur plus d'une carte", () => {
+    expect(poses.length).toBeGreaterThan(5);
+  });
+
+  it("ne nomment que des objets du catalogue", () => {
+    for (const [id, map] of maps) {
+      for (const objet of map.items ?? []) {
+        expect(ITEMS[objet.item], `${id} : ${objet.item} inconnu`).toBeDefined();
+        if (objet.count !== undefined) {
+          expect(objet.count, `${id} : ${objet.item}`).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  describe.each(poses)("carte %s", (id, map) => {
+    it("ne pose rien dans un mur ni dans l'eau", () => {
+      for (const { x, y } of map.items!) {
+        const tile = tileAt(map, x, y);
+        expect(tile, `${id} : ${x},${y} hors carte`).toBeDefined();
+        expect(tile!.solid, `${id} : ${x},${y} dans un mur`).toBe(false);
+        expect(tile!.swim, `${id} : ${x},${y} dans l'eau`).toBeFalsy();
+      }
+    });
+
+    it("ne pose rien sur une porte, un panneau ou un PNJ", () => {
+      const pris = new Set([
+        ...map.warps.map((w) => `${w.x},${w.y}`),
+        ...map.signs.map((s) => `${s.x},${s.y}`),
+        ...map.npcs.map((n) => `${n.x},${n.y}`),
+      ]);
+      for (const { x, y } of map.items!) {
+        expect(pris.has(`${x},${y}`), `${id} : ${x},${y} occupé`).toBe(false);
+      }
+    });
+
+    it("ne pose jamais deux objets sur la même case", () => {
+      const cases = map.items!.map((o) => `${o.x},${o.y}`);
+      expect(new Set(cases).size, `${id} : doublon`).toBe(cases.length);
+    });
+
+    it("laisse chaque objet accessible à pied depuis une entrée", () => {
+      const depart = entrees(id);
+      expect(depart.length, `${id} : aucune entrée`).toBeGreaterThan(0);
+      const joignables = atteignables(map, depart[0]);
+      for (const { x, y } of map.items!) {
+        expect(
+          joignables.has(`${x},${y}`),
+          `${id} : ${x},${y} hors d'atteinte depuis ${depart[0].x},${depart[0].y}`,
+        ).toBe(true);
+      }
+    });
+  });
+
+  it("donne à chaque case un marqueur qui lui est propre", () => {
+    const marqueurs = new Set<string>();
+    for (const [id, map] of poses) {
+      for (const { x, y } of map.items!) {
+        const flag = groundFlag(id, x, y);
+        expect(marqueurs.has(flag), `${flag} en double`).toBe(false);
+        marqueurs.add(flag);
+        expect(groundAt(map, x, y)).not.toBeNull();
+      }
+    }
+  });
+
+  it("ne voit rien là où rien n'a été posé", () => {
+    expect(groundAt(MAPS.bourg, 0, 0)).toBeNull();
+    expect(groundAt(MAPS.route1, 9, 9)).toBeNull();
   });
 });

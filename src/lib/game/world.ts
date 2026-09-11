@@ -4,6 +4,7 @@
  */
 
 import { DEX, WILD_POOL } from "./dex";
+import type { ItemId } from "./items";
 
 export type Dir = "up" | "down" | "left" | "right";
 
@@ -117,6 +118,18 @@ export type Warp = {
 
 export type Encounter = { id: number; min: number; max: number; weight: number };
 
+/**
+ * Un objet posé sur une case, ramassé une fois pour toutes : c'est ce qui
+ * donne une raison de pousser jusqu'au fond d'un cul-de-sac.
+ */
+export type GroundItem = {
+  x: number;
+  y: number;
+  item: ItemId;
+  /** Combien on en trouve d'un coup. Un seul, sauf mention. */
+  count?: number;
+};
+
 export type MapSpec = {
   name: string;
   indoor?: boolean;
@@ -127,7 +140,20 @@ export type MapSpec = {
   warps: Warp[];
   signs: { x: number; y: number; text: string[] }[];
   encounters?: Encounter[];
+  /** Ce qui traîne par terre, à ramasser en marchant dessus. */
+  items?: GroundItem[];
 };
+
+/**
+ * Le marqueur d'un objet déjà ramassé. Il tient dans les drapeaux de la
+ * partie : une case ne se vide qu'une fois, et la sauvegarde s'en souvient.
+ */
+export const groundFlag = (map: MapId, x: number, y: number) =>
+  `sol:${map}:${x}:${y}`;
+
+/** L'objet posé sur cette case, s'il y en a un. */
+export const groundAt = (map: MapSpec, x: number, y: number): GroundItem | null =>
+  map.items?.find((o) => o.x === x && o.y === y) ?? null;
 
 /* ----------------------------------------------------------- les cartes */
 
@@ -2336,6 +2362,71 @@ export const MAPS: Record<MapId, MapSpec> = {
     ],
   },
 };
+
+/* --------------------------------------------------- ce qui traîne au sol */
+
+/**
+ * Les objets posés dans le décor. Rangés ici plutôt que dans chaque carte :
+ * on voit d'un coup d'œil ce que le monde a semé, et la progression se règle
+ * en une seule page. Chaque case a été choisie à l'écart des chemins, et le
+ * jeu de tests vérifie qu'elle reste accessible à pied.
+ */
+const GROUND: Partial<Record<MapId, GroundItem[]>> = {
+  // Autour de chez soi : de quoi apprendre à regarder par terre.
+  bourg: [{ x: 2, y: 16, item: "potion" }],
+  route1: [
+    { x: 17, y: 1, item: "ball", count: 3 },
+    { x: 2, y: 17, item: "potion" },
+  ],
+  route2: [
+    { x: 2, y: 16, item: "potion" },
+    { x: 17, y: 1, item: "superball" },
+  ],
+  maillard: [{ x: 17, y: 1, item: "huile" }],
+  route3: [
+    { x: 3, y: 16, item: "rappel" },
+    { x: 17, y: 1, item: "superpotion" },
+  ],
+
+  // Le nord : les trouvailles deviennent sérieuses.
+  route4: [
+    { x: 2, y: 24, item: "superball", count: 2 },
+    { x: 17, y: 1, item: "totalsoin" },
+  ],
+  aigueperse: [{ x: 2, y: 18, item: "baie-oran" }],
+  route5: [
+    { x: 2, y: 24, item: "hyperpotion" },
+    { x: 17, y: 24, item: "pierre-feu" },
+  ],
+  route6: [
+    { x: 2, y: 22, item: "pierre-eau" },
+    { x: 17, y: 1, item: "restes" },
+  ],
+  mions: [{ x: 17, y: 18, item: "pierre-foudre" }],
+  route7: [
+    { x: 2, y: 22, item: "elixir" },
+    { x: 17, y: 22, item: "ceinture" },
+  ],
+  route8: [
+    { x: 2, y: 20, item: "hyperball", count: 2 },
+    { x: 17, y: 1, item: "pierre-lune" },
+  ],
+  ligue: [
+    { x: 2, y: 14, item: "hyperpotion", count: 2 },
+    { x: 17, y: 1, item: "lunettes" },
+  ],
+
+  // La grotte garde les pierres que personne ne vend au coin de la rue.
+  grotte: [
+    { x: 2, y: 1, item: "pierre-nuit" },
+    { x: 13, y: 2, item: "roche-royale" },
+    { x: 1, y: 11, item: "pierre-plante" },
+  ],
+};
+
+for (const [id, items] of Object.entries(GROUND) as [MapId, GroundItem[]][]) {
+  MAPS[id].items = items;
+}
 
 /* ------------------------------------------------- la carte de la région */
 

@@ -20,6 +20,7 @@ import {
   maxHp,
   playerMove,
   startWild,
+  type Mon,
 } from "./battle";
 import { ITEMS, STONES, emptyBag, isStone, type Bag, type ItemId } from "./items";
 import {
@@ -275,26 +276,31 @@ describe("le bonheur", () => {
     expect(apres.party[0].bonheur).toBe(BONHEUR_MAX);
   });
 
+  /**
+   * Joue jusqu'à ce que le Pokémon du joueur tombe : un coup peut rater, et
+   * un seul tour ne suffit pas toujours.
+   */
+  const jusquAuKo = (mine: Mon) => {
+    mine.hp = 1;
+    const foe = createMon(506, 80, false);
+    let etat = startWild([mine], foe, emptyBag());
+    for (let i = 0; i < 20 && etat.party[0].hp > 0; i++) {
+      etat = playerMove(etat, 0).state;
+    }
+    expect(etat.party[0].hp, "le Pokémon n'est jamais tombé").toBe(0);
+    return etat.party[0];
+  };
+
   it("retombe quand la créature tombe pour de bon", () => {
     const mine = createMon(495, 5, false);
     mine.bonheur = 200;
-    mine.hp = 1;
-    // Un adversaire bien plus fort : le tour s'achève sur un K.O.
-    const foe = createMon(506, 80, false);
-    const state = startWild([mine], foe, emptyBag());
-    const { state: apres, messages } = playerMove(state, 0);
-    expect(messages.join(" "), "personne n'est tombé").toContain("K.O.");
-    expect(apres.party[0].hp).toBe(0);
-    expect(apres.party[0].bonheur).toBe(200 - BONHEUR_KO);
+    expect(jusquAuKo(mine).bonheur).toBe(200 - BONHEUR_KO);
   });
 
   it("ne descend jamais sous zéro", () => {
     const mine = createMon(495, 5, false);
     mine.bonheur = 2;
-    mine.hp = 1;
-    const foe = createMon(506, 80, false);
-    const { state: apres } = playerMove(startWild([mine], foe, emptyBag()), 0);
-    expect(apres.party[0].bonheur).toBe(0);
+    expect(jusquAuKo(mine).bonheur).toBe(0);
   });
 
   it("laisse l'adversaire tranquille : seul le vôtre y perd", () => {
@@ -302,9 +308,12 @@ describe("le bonheur", () => {
     const foe = createMon(495, 5, false);
     foe.bonheur = 200;
     foe.hp = 1;
-    const { state: apres } = playerMove(startWild([mine], foe, emptyBag()), 0);
-    expect(apres.foe.hp).toBe(0);
-    expect(apres.foe.bonheur).toBe(200);
+    let etat = startWild([mine], foe, emptyBag());
+    for (let i = 0; i < 20 && etat.foe.hp > 0; i++) {
+      etat = playerMove(etat, 0).state;
+    }
+    expect(etat.foe.hp, "l'adversaire tient encore").toBe(0);
+    expect(etat.foe.bonheur).toBe(200);
   });
 
   it("revient à sa valeur de départ pour une partie d'avant", () => {
