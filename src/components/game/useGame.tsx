@@ -5,20 +5,21 @@ import { animatedUrl, cryUrl, staticUrl } from "@/lib/pokeapi";
 import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import { atNight, momentNow } from "@/lib/game/heure";
 import { WILD_POOL } from "@/lib/game/dex";
-import {
-  MAX_LEVEL,
-  species,
-} from "@/lib/game/data";
+import { hatch, walkDaycare, walkEggs } from "@/lib/game/elevage";
+import { MAX_LEVEL, species, type MoveId } from "@/lib/game/data";
 import {
   ITEM_ORDER,
   countOf,
+  ITEMS,
   ctMove,
   isHeld,
+  isPP,
   type ItemId,
 } from "@/lib/game/items";
 import {
   activeMon,
   createMon,
+  healMon,
   isKo,
   maxHp,
   startTrainer,
@@ -62,7 +63,9 @@ import {
   importSave,
   saveGame,
   applyItem,
+  applyPP,
   enterHallOfFame,
+  relearnMove,
   giveHeld,
   takeHeld,
   teachMove,
@@ -259,6 +262,14 @@ export function useGame({
           i: 0,
           then: { do: "revanche", npc: npc.id },
         });
+        return;
+      }
+      if (npc.daycare) {
+        setPhase({ kind: "text", lines: npc.lines, i: 0, then: { do: "pension" } });
+        return;
+      }
+      if (npc.relearn) {
+        setPhase({ kind: "text", lines: npc.lines, i: 0, then: { do: "maitre" } });
         return;
       }
       if (npc.tower) {
@@ -656,6 +667,50 @@ export function useGame({
         }
       }
 
+      // Chaque pas fait avancer la Pension et rapproche les œufs portés. Sans
+      // œuf ni pensionnaire, il n'y a rien à compter : on ne touche à rien.
+      if (game.eggs.length || game.daycare.mons.length) {
+        const eggs = walkEggs(game.eggs);
+        const eclos = eggs.filter((e) => e.steps <= 0);
+        const daycare = walkDaycare(game.daycare);
+
+        if (!eclos.length) {
+          setGame((g) => ({ ...g, daycare, eggs }));
+        } else {
+          // Un œuf arrivé à terme devient un Pokémon : dans l'équipe s'il y a
+          // de la place, au PC sinon.
+          let suite: GameState = {
+            ...game,
+            daycare,
+            eggs: eggs.filter((e) => e.steps > 0),
+          };
+          const nes: string[] = [];
+          for (const oeuf of eclos) {
+            const petit = hatch(oeuf);
+            nes.push(petit.name);
+            suite = addCaught(suite, petit);
+          }
+          setGame(suite);
+          // Une éclosion arrive en pleine marche, loin de toute porte : on
+          // l'enregistre sans attendre, sinon un onglet fermé l'effacerait.
+          saveGame({
+            ...suite,
+            x: player.current.x,
+            y: player.current.y,
+            dir: player.current.dir,
+          });
+          setPhase({
+            kind: "text",
+            lines: [
+              "Tiens ? L'œuf bouge…",
+              `Il éclôt ! ${nes.join(", ")} vient au monde.`,
+            ],
+            i: 0,
+            then: null,
+          });
+        }
+      }
+
       const dispo = game.party.some((m) => !isKo(m));
 
       // En mer, la faune est la même partout : les espèces d'eau du Pokédex.
@@ -916,6 +971,14 @@ export function useGame({
         case "tour":
           setCursor(0);
           setPhase({ kind: "tour" });
+          break;
+        case "pension":
+          setCursor(0);
+          setPhase({ kind: "pension", on: "menu", message: null });
+          break;
+        case "maitre":
+          setCursor(0);
+          setPhase({ kind: "maitre", on: "qui", message: null });
           break;
         case "pantheon":
           setCursor(0);
@@ -1184,6 +1247,129 @@ export function useGame({
         return;
       }
 
+      if (phase.kind === "pension") {
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        if (choice.id === "back") {
+          setCursor(0);
+          setPhase({ kind: "pension", on: "menu", message: null });
+          return;
+        }
+        if (choice.id === "confier") {
+          setCursor(0);
+          setPhase({ kind: "pension", on: "confier", message: null });
+          return;
+        }
+        if (choice.id === "reprendre") {
+          setCursor(0);
+          setPhase({ kind: "pension", on: "reprendre", message: null });
+          return;
+        }
+        if (choice.id === "oeuf") {
+          const oeuf = game.daycare.ready;
+          if (!oeuf) return;
+          setGame((g) => ({
+            ...g,
+            eggs: [...g.eggs, oeuf],
+            daycare: { ...g.daycare, ready: null },
+          }));
+          setCursor(0);
+          setPhase({
+            kind: "pension",
+            on: "menu",
+            message: "Vous recevez un œuf ! Marchez, il finira par bouger.",
+          });
+          return;
+        }
+
+        const [quoi, rang] = choice.id.split(":");
+        const i = Number(rang);
+        if (quoi === "confier") {
+          const mon = game.party[i];
+          setGame((g) => ({
+            ...g,
+            party: g.party.filter((_, k) => k !== i),
+            daycare: { ...g.daycare, mons: [...g.daycare.mons, healMon(mon)] },
+          }));
+          setCursor(0);
+          setPhase({
+            kind: "pension",
+            on: "menu",
+            message: `${mon.name} reste à la Pension. Il y sera soigné.`,
+          });
+          return;
+        }
+        if (quoi === "reprendre") {
+          const mon = game.daycare.mons[i];
+          setGame((g) => ({
+            ...g,
+            party: [...g.party, mon],
+            // Reprendre un pensionnaire annule l'œuf en préparation.
+            daycare: {
+              ...g.daycare,
+              mons: g.daycare.mons.filter((_, k) => k !== i),
+              steps: 0,
+            },
+          }));
+          setCursor(0);
+          setPhase({
+            kind: "pension",
+            on: "menu",
+            message: `${mon.name} vous revient.`,
+          });
+          return;
+        }
+        return;
+      }
+
+      if (phase.kind === "maitre") {
+        if (choice.id === "leave") {
+          setPhase({ kind: "world" });
+          return;
+        }
+        if (choice.id === "back") {
+          setCursor(0);
+          setPhase({ kind: "maitre", on: "qui", message: null });
+          return;
+        }
+        const [quoi, valeur] = choice.id.split(":");
+        if (quoi === "qui") {
+          setCursor(0);
+          setPhase({ kind: "maitre", on: "quoi", cible: Number(valeur), message: null });
+          return;
+        }
+        if (quoi === "move") {
+          const cible = phase.cible ?? 0;
+          const move = valeur as MoveId;
+          // Quatre attaques déjà : il faut en céder une.
+          if (game.party[cible].moves.length >= 4) {
+            setCursor(0);
+            setPhase({ kind: "maitre", on: "oubli", cible, move, message: null });
+            return;
+          }
+          const appris = relearnMove(game, cible, move, -1);
+          setGame(appris.state);
+          setCursor(0);
+          setPhase({ kind: "maitre", on: "qui", message: appris.message });
+          return;
+        }
+        if (quoi === "oubli") {
+          const appris = relearnMove(
+            game,
+            phase.cible ?? 0,
+            phase.move ?? "charge",
+            Number(valeur),
+          );
+          setGame(appris.state);
+          setCursor(0);
+          setPhase({ kind: "maitre", on: "qui", message: appris.message });
+          return;
+        }
+        return;
+      }
+
       if (phase.kind === "pantheon") {
         setCursor(0);
         setPhase({ kind: "carte-dresseur" });
@@ -1258,6 +1444,29 @@ export function useGame({
           setGame(appris.state);
           setCursor(0);
           setPhase({ kind: "sac", on: "objets", message: appris.message });
+          return;
+        }
+
+        if (isPP(item)) {
+          const [quoi, rang] = choice.id.split(":");
+          // Premier passage : on choisit le porteur. Second : l'attaque.
+          if (quoi === "mon") {
+            const cible = Number(rang);
+            if (ITEMS[item].pp?.toutes) {
+              const soin = applyPP(game, item, cible, 0);
+              setGame(soin.state);
+              setCursor(0);
+              setPhase({ kind: "sac", on: "objets", message: soin.message });
+              return;
+            }
+            setCursor(0);
+            setPhase({ kind: "sac", on: "cible", item, cible, message: null });
+            return;
+          }
+          const soin = applyPP(game, item, phase.cible ?? 0, Number(rang));
+          setGame(soin.state);
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", message: soin.message });
           return;
         }
 
@@ -1450,6 +1659,22 @@ export function useGame({
           else if (button === "b") setPhase({ kind: "world" });
           return;
 
+        case "pension":
+        case "maitre":
+          if (button === "up") moveCursor(0, -1);
+          else if (button === "down") moveCursor(0, 1);
+          else if (button === "a") pick(cursor);
+          else if (button === "b") {
+            setCursor(0);
+            // B remonte d'un cran, puis ferme.
+            if (phase.kind === "pension") {
+              if (phase.on === "menu") setPhase({ kind: "world" });
+              else setPhase({ kind: "pension", on: "menu", message: null });
+            } else if (phase.on === "qui") setPhase({ kind: "world" });
+            else setPhase({ kind: "maitre", on: "qui", message: null });
+          }
+          return;
+
         case "pantheon":
           // Les flèches feuillettent les sacres, du premier au dernier.
           if ((button === "left" || button === "right") && game.hall.length > 1) {
@@ -1601,7 +1826,11 @@ export function useGame({
       ? phase.lines[phase.i]
       : phase.kind === "shop"
         ? (phase.message ?? "Que puis-je vous servir ?")
-        : phase.kind === "sauvegarde"
+        : phase.kind === "pension"
+        ? (phase.message ?? "Que puis-je pour vous ?")
+        : phase.kind === "maitre"
+          ? (phase.message ?? "Quelle attaque faut-il réveiller ?")
+          : phase.kind === "sauvegarde"
         ? (phase.message ?? "Où voulez-vous enregistrer votre partie ?")
         : phase.kind === "sac"
           ? (phase.message ?? "Que sortez-vous du sac ?")
@@ -1749,6 +1978,8 @@ export function useGame({
       phase.kind === "tour" ||
       phase.kind === "carte-dresseur" ||
       phase.kind === "pantheon" ||
+      phase.kind === "pension" ||
+      phase.kind === "maitre" ||
       phase.kind === "fiche" ||
       phase.kind === "surnom" ||
       phase.kind === "bus" ||

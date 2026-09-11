@@ -5,7 +5,7 @@
  * l'enchaînement des phases.
  */
 
-import { MOVES, TYPE_FR, expForLevel, species } from "@/lib/game/data";
+import { MOVES, TYPE_FR, expForLevel, species, type MoveId } from "@/lib/game/data";
 import { STATUS_FR, maxHp, statOf, type Mon } from "@/lib/game/battle";
 import {
   ITEMS,
@@ -15,10 +15,13 @@ import {
   ctMove,
   effectOn,
   isHeld,
+  isPP,
+  ppEffectOn,
   type ItemId,
 } from "@/lib/game/items";
 import { abilityName, abilityWorks, natureName } from "@/lib/game/traits";
 import { MOMENT_FR, momentNow } from "@/lib/game/heure";
+import { DAYCARE_MAX, canBreed, eggHint } from "@/lib/game/elevage";
 import { BUS_STOPS, MAPS, type MapId } from "@/lib/game/world";
 import {
   BOX_ORDER_FR,
@@ -26,8 +29,10 @@ import {
   PARTY_MAX,
   STARTERS,
   SLOTS,
+  RELEARN_PRICE,
   hallDate,
   hallTime,
+  relearnable,
   hasFlag,
   towerFoe,
   towerReward,
@@ -48,6 +53,8 @@ export type Then =
   | { do: "revanche"; npc: string }
   | { do: "tour" }
   | { do: "pantheon" }
+  | { do: "pension" }
+  | { do: "maitre" }
   | { do: "statique"; npc: string }
   | { do: "shop"; counter: "boutique" | "velo" }
   | { do: "world" };
@@ -81,6 +88,15 @@ export type Phase =
   | { kind: "tour" }
   | { kind: "carte-dresseur" }
   | { kind: "pantheon"; index: number }
+  | { kind: "pension"; on: "menu" | "confier" | "reprendre"; message: string | null }
+  | {
+      kind: "maitre";
+      on: "qui" | "quoi" | "oubli";
+      /** Pokémon choisi, puis attaque retenue. */
+      cible?: number;
+      move?: MoveId;
+      message: string | null;
+    }
   | { kind: "battle"; ui: BattleUi };
 
 /** Les rayons, aux prix d'Unys. */
@@ -224,6 +240,44 @@ export function worldScreen(
       if (phase.on === "cible") {
         const item = phase.item ?? "potion";
         const move = ctMove(item);
+
+        // Une Huile ne se pose pas comme un soin : elle vise une attaque.
+        if (isPP(item)) {
+          const toutes = Boolean(ITEMS[item].pp?.toutes);
+          if (!toutes && phase.cible !== undefined) {
+            const porteur = game.party[phase.cible];
+            return {
+              title: `${ITEMS[item].name} sur quelle attaque ?`,
+              hint: "▲ ▼ pour choisir · A pour recharger · B pour revenir",
+              layout: "list",
+              list: [
+                ...(porteur?.moves ?? []).map((m, i) => ({
+                  id: `pp:${i}`,
+                  label: MOVES[m.id].name,
+                  sub: `PP ${m.pp}/${m.max}`,
+                  disabled: m.pp >= m.max,
+                  tone: "fight" as const,
+                })),
+                back,
+              ],
+            };
+          }
+          return {
+            title: `${ITEMS[item].name} — à qui ?`,
+            hint: "▲ ▼ pour choisir · A pour valider · B pour revenir",
+            layout: "list",
+            list: [
+              ...game.party.map((m, i) => ({
+                id: `mon:${i}`,
+                ...monLine(m),
+                sub: `${m.moves.filter((x) => x.pp < x.max).length} attaque(s) à sec`,
+                disabled: ppEffectOn(item, m).refus !== null && toutes,
+                tone: "party" as const,
+              })),
+              back,
+            ],
+          };
+        }
         // Un objet tenu se confie : on montre ce que chacun porte déjà.
         if (isHeld(item)) {
           return {
@@ -543,6 +597,155 @@ export function worldScreen(
             tone: "fight" as const,
           },
           { id: "leave", label: "FERMER", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "pension") {
+      const back = { id: "back", label: "RETOUR", tone: "back" as const };
+      if (phase.on === "confier") {
+        return {
+          title: "Confier un Pokémon",
+          hint: "▲ ▼ pour choisir · A pour confier · B pour revenir",
+          layout: "list",
+          list: [
+            ...game.party.map((mon, i) => ({
+              id: `confier:${i}`,
+              ...monLine(mon),
+              // On ne se sépare jamais de son dernier Pokémon.
+              disabled: game.party.length <= 1,
+              tone: "party" as const,
+            })),
+            back,
+          ],
+        };
+      }
+      if (phase.on === "reprendre") {
+        return {
+          title: "Reprendre un Pokémon",
+          hint: "▲ ▼ pour choisir · A pour reprendre · B pour revenir",
+          layout: "list",
+          list: [
+            ...game.daycare.mons.map((mon, i) => ({
+              id: `reprendre:${i}`,
+              ...monLine(mon),
+              disabled: game.party.length >= PARTY_MAX,
+              tone: "party" as const,
+            })),
+            back,
+          ],
+        };
+      }
+      return {
+        title: "Pension",
+        hint: "▲ ▼ pour choisir · A pour valider · B pour sortir",
+        layout: "list",
+        list: [
+          {
+            id: "confier",
+            label: "CONFIER",
+            sub: `${game.daycare.mons.length}/${DAYCARE_MAX} en pension`,
+            disabled: game.daycare.mons.length >= DAYCARE_MAX || game.party.length <= 1,
+            tone: "party" as const,
+          },
+          {
+            id: "reprendre",
+            label: "REPRENDRE",
+            sub: game.daycare.mons.length ? "les récupérer" : "il n'y a personne",
+            disabled: !game.daycare.mons.length || game.party.length >= PARTY_MAX,
+            tone: "party" as const,
+          },
+          {
+            id: "oeuf",
+            label: "PRENDRE L'ŒUF",
+            sub: game.daycare.ready
+              ? "un œuf vous attend !"
+              : canBreed(game.daycare.mons)
+                ? "revenez après quelques pas"
+                : "il en faut deux",
+            disabled: !game.daycare.ready,
+            tone: "fight" as const,
+          },
+          {
+            id: "portes",
+            label: `${game.eggs.length} œuf${game.eggs.length > 1 ? "s" : ""} sur vous`,
+            sub: game.eggs.length
+              ? game.eggs.map((e) => eggHint(e)).join(" · ")
+              : "vos poches sont vides",
+            disabled: true,
+            tone: "plain" as const,
+          },
+          { id: "leave", label: "SORTIR", tone: "back" as const },
+        ],
+      };
+    }
+
+    if (phase.kind === "maitre") {
+      const back = { id: "back", label: "RETOUR", tone: "back" as const };
+      const mon = game.party[phase.cible ?? 0];
+
+      if (phase.on === "oubli" && mon) {
+        return {
+          title: "Quelle attaque oublier ?",
+          hint: `${mon.name} en connaît déjà quatre · B pour renoncer`,
+          layout: "list",
+          list: [
+            ...mon.moves.map((m, i) => ({
+              id: `oubli:${i}`,
+              label: MOVES[m.id].name,
+              sub: `${TYPE_FR[MOVES[m.id].type]} · PP ${m.pp}/${m.max}`,
+              tone: "fight" as const,
+            })),
+            back,
+          ],
+        };
+      }
+
+      if (phase.on === "quoi" && mon) {
+        const oubliees = relearnable(mon);
+        return {
+          title: `Que retrouver pour ${mon.name} ?`,
+          hint: `${RELEARN_PRICE} P par attaque · B pour revenir`,
+          layout: "list",
+          list: [
+            ...oubliees.map((id) => ({
+              id: `move:${id}`,
+              label: MOVES[id].name,
+              sub: `${TYPE_FR[MOVES[id].type]} · ${
+                MOVES[id].power ? `puissance ${MOVES[id].power}` : "statut"
+              }`,
+              disabled: game.money < RELEARN_PRICE,
+              tone: "fight" as const,
+            })),
+            ...(oubliees.length
+              ? []
+              : [
+                  {
+                    id: "rien",
+                    label: "RIEN À RETROUVER",
+                    sub: "il connaît déjà tout ce qu'il peut",
+                    disabled: true,
+                    tone: "plain" as const,
+                  },
+                ]),
+            back,
+          ],
+        };
+      }
+
+      return {
+        title: "Maître des Capacités",
+        hint: "▲ ▼ pour choisir · A pour valider · B pour sortir",
+        layout: "list",
+        list: [
+          ...game.party.map((m, i) => ({
+            id: `qui:${i}`,
+            ...monLine(m),
+            sub: `${relearnable(m).length} attaque(s) à retrouver`,
+            disabled: !relearnable(m).length,
+            tone: "party" as const,
+          })),
+          { id: "leave", label: "SORTIR", tone: "back" as const },
         ],
       };
     }

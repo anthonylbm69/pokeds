@@ -86,6 +86,10 @@ export type NpcSpec = {
   needs?: string[];
   /** Tient le comptoir de la Tour de Combat. */
   tower?: boolean;
+  /** Garde les Pokémon et remet les œufs : la Pension. */
+  daycare?: boolean;
+  /** Réapprend les attaques oubliées, contre monnaie. */
+  relearn?: boolean;
   lines: string[];
   trainer?: TrainerSpec;
   /** Soigne l'équipe après la réplique. */
@@ -735,7 +739,7 @@ export const MAPS: Record<MapId, MapSpec> = {
   },
 
   maison2: {
-    name: "Maison de Maillard",
+    name: "Pension de Maillard",
     indoor: true,
     tiles: [
       "XXXXXXXXXX",
@@ -748,6 +752,32 @@ export const MAPS: Record<MapId, MapSpec> = {
       "XXXXDDXXXX",
     ],
     npcs: [
+      {
+        id: "pension",
+        x: 3,
+        y: 2,
+        dir: "down",
+        sprite: "maman",
+        daycare: true,
+        lines: [
+          "Bienvenue à la Pension !",
+          "Confiez-m'en deux, allez marcher, et revenez voir.",
+          "Il arrive qu'un œuf apparaisse — ne me demandez pas comment.",
+        ],
+      },
+      {
+        id: "maitre-capacites",
+        x: 6,
+        y: 4,
+        dir: "down",
+        sprite: "prof",
+        relearn: true,
+        lines: [
+          "On m'appelle le Maître des Capacités.",
+          "Une attaque oubliée n'est jamais perdue : elle dort quelque part.",
+          "Contre une petite somme, je la réveille.",
+        ],
+      },
       {
         id: "habitant2",
         x: 6,

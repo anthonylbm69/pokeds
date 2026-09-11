@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   SLOTS,
   clearSlot,
+  dreamTeam,
   exportName,
   exportSave,
   giveStarter,
@@ -440,5 +441,72 @@ describe("l'affichage d'un sacre", () => {
     expect(hallTime(12_600)).toBe("3 h 30");
     // Les secondes qui traînent ne doivent pas déborder sur la minute.
     expect(hallTime(3659)).toBe("1 h 00");
+  });
+});
+
+describe("la Pension, d'une partie à l'autre", () => {
+  const avecPension = () => {
+    const base = partie();
+    const [garde] = dreamTeam();
+    return {
+      ...base,
+      daycare: { mons: [garde], steps: 137, ready: null },
+      eggs: [{ id: 495, nature: 9, moves: ["morsure"] as const, steps: 42 }],
+    } as GameState;
+  };
+
+  it("part vide pour une partie neuve", () => {
+    const jeu = newGame("Anthony");
+    expect(jeu.daycare).toEqual({ mons: [], steps: 0, ready: null });
+    expect(jeu.eggs).toEqual([]);
+  });
+
+  it("survit à l'aller-retour par un fichier", () => {
+    const lu = importSave(exportSave(avecPension()));
+    expect("erreur" in lu).toBe(false);
+    if ("erreur" in lu) return;
+    expect(lu.state.daycare.steps).toBe(137);
+    expect(lu.state.daycare.mons).toHaveLength(1);
+    expect(lu.state.eggs).toHaveLength(1);
+    expect(lu.state.eggs[0].steps).toBe(42);
+    expect(lu.state.eggs[0].nature).toBe(9);
+  });
+
+  it("remet d'aplomb les pensionnaires comme l'équipe", () => {
+    const jeu = avecPension();
+    // Un fichier bricolé : un pensionnaire aux PV gonflés.
+    jeu.daycare.mons[0].hp = 9999;
+    const lu = reviveGame(JSON.parse(JSON.stringify(jeu)))!;
+    expect(lu.daycare.mons[0].hp).toBe(maxHp(lu.daycare.mons[0]));
+  });
+
+  it("se remplit vide pour une partie d'avant l'élevage", () => {
+    const sans = JSON.parse(JSON.stringify(partie())) as Record<string, unknown>;
+    delete sans.daycare;
+    delete sans.eggs;
+    const lu = reviveGame(sans)!;
+    expect(lu.daycare).toEqual({ mons: [], steps: 0, ready: null });
+    expect(lu.eggs).toEqual([]);
+  });
+
+  it("écarte un œuf qui n'a pas la forme d'un œuf", () => {
+    const brut = JSON.parse(JSON.stringify(partie())) as Record<string, unknown>;
+    brut.eggs = [null, { steps: 3 }, { id: 495, nature: 0, moves: [], steps: 3 }];
+    expect(reviveGame(brut)!.eggs).toHaveLength(1);
+  });
+});
+
+describe("l'œuf qui attend à la Pension", () => {
+  it("se vérifie comme ceux qu'on porte", () => {
+    const brut = JSON.parse(JSON.stringify(partie())) as Record<string, unknown>;
+    brut.daycare = { mons: [], steps: 10, ready: { steps: 3 } };
+    expect(reviveGame(brut)!.daycare.ready).toBeNull();
+  });
+
+  it("revient intact quand il a la bonne forme", () => {
+    const brut = JSON.parse(JSON.stringify(partie())) as Record<string, unknown>;
+    const oeuf = { id: 498, nature: 4, moves: [], steps: 300 };
+    brut.daycare = { mons: [], steps: 10, ready: oeuf };
+    expect(reviveGame(brut)!.daycare.ready).toEqual(oeuf);
   });
 });

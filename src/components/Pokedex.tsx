@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   GENERATIONS,
   fetchIndex,
@@ -9,6 +16,13 @@ import {
   type IndexEntry,
   type PokemonDetail,
 } from "@/lib/pokeapi";
+import {
+  prefsServerSnapshot,
+  prefsSnapshot,
+  savePrefs,
+  subscribePrefs,
+  type DexPrefs,
+} from "@/lib/reglages";
 import TopScreen, { type DexTab } from "./TopScreen";
 import BottomScreen from "./BottomScreen";
 import type { DsButton, ModeParts } from "./DSConsole";
@@ -52,14 +66,38 @@ export function usePokedex({
   only?: number[];
 }): ModeParts {
   const [index, setIndex] = useState(initialIndex);
-  const [selectedId, setSelectedId] = useState(1);
+  // Les réglages vivent hors de React : le serveur rend les valeurs d'usine,
+  // le client relit le disque après l'hydratation, et chaque changement y
+  // retourne aussitôt. Rien à ressusciter au montage.
+  const prefs = useSyncExternalStore(
+    subscribePrefs,
+    prefsSnapshot,
+    prefsServerSnapshot,
+  );
+  const { gen, tab, sound, id: selectedId } = prefs;
+
+  /** Un réglage se change comme un état React, mais il part aussi sur le disque. */
+  const regleur = useCallback(
+    <K extends keyof DexPrefs>(cle: K) =>
+      (valeur: DexPrefs[K] | ((actuel: DexPrefs[K]) => DexPrefs[K])) => {
+        const actuel = prefsSnapshot();
+        const neuf =
+          typeof valeur === "function"
+            ? (valeur as (a: DexPrefs[K]) => DexPrefs[K])(actuel[cle])
+            : valeur;
+        savePrefs({ ...actuel, [cle]: neuf });
+      },
+    [],
+  );
+  const setSelectedId = useMemo(() => regleur("id"), [regleur]);
+  const setGen = useMemo(() => regleur("gen"), [regleur]);
+  const setTab = useMemo(() => regleur("tab"), [regleur]);
+  const setSound = useMemo(() => regleur("sound"), [regleur]);
+
   const [detail, setDetail] = useState<PokemonDetail | null>(null);
   const [pending, setPending] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [gen, setGen] = useState(0);
-  const [tab, setTab] = useState<DexTab>("info");
-  const [sound, setSound] = useState(true);
 
   const cache = useRef(new Map<number, PokemonDetail>());
   const searchRef = useRef<HTMLInputElement>(null);
@@ -144,17 +182,20 @@ export function usePokedex({
       );
       setSelectedId(entries[next].id);
     },
-    [entries, currentId],
+    [entries, currentId, setSelectedId],
   );
 
-  const shiftTab = useCallback((delta: number) => {
-    setTab(
-      (t) =>
-        TAB_ORDER[
-          (TAB_ORDER.indexOf(t) + delta + TAB_ORDER.length) % TAB_ORDER.length
-        ],
-    );
-  }, []);
+  const shiftTab = useCallback(
+    (delta: number) => {
+      setTab(
+        (t) =>
+          TAB_ORDER[
+            (TAB_ORDER.indexOf(t) + delta + TAB_ORDER.length) % TAB_ORDER.length
+          ],
+      );
+    },
+    [setTab],
+  );
 
   // Le cri accompagne chaque nouvelle fiche, comme dans le jeu.
   const lastCried = useRef<number | null>(null);
@@ -227,7 +268,19 @@ export function usePokedex({
           break;
       }
     },
-    [active, step, shiftTab, entries, detail, query, playCry, onExit],
+    [
+      active,
+      step,
+      shiftTab,
+      entries,
+      detail,
+      query,
+      playCry,
+      onExit,
+      setGen,
+      setSelectedId,
+      setSound,
+    ],
   );
 
   return {

@@ -3,7 +3,7 @@
  * pour que `localStorage` suffise.
  */
 
-import { MOVES, species, type MoveId, type TypeName } from "./data";
+import { MOVES, species, typedMoveset, type MoveId, type TypeName } from "./data";
 import { STATUS_FR, createMon, healMon, maxHp, type Mon } from "./battle";
 import {
   ITEMS,
@@ -11,11 +11,14 @@ import {
   ctMove,
   effectOn,
   normaliseBag,
+  ppEffectOn,
+  refillPP,
   spend,
   startingBag,
   type Bag,
   type ItemId,
 } from "./items";
+import { emptyDaycare, type Daycare, type Egg } from "./elevage";
 import type { Dir, MapId } from "./world";
 
 export type GameState = {
@@ -53,6 +56,10 @@ export type GameState = {
   wins: number;
   /** Les sacres inscrits au Panthéon, du plus ancien au plus récent. */
   hall: HallEntry[];
+  /** Ce que la Pension garde pour vous. */
+  daycare: Daycare;
+  /** Les œufs que l'on porte, et qui éclosent en marchant. */
+  eggs: Egg[];
   /** Meilleure série à la Tour de Combat, et série en cours. */
   towerBest: number;
   towerRun: number;
@@ -155,6 +162,8 @@ export function newGame(name: string): GameState {
     played: 0,
     wins: 0,
     hall: [],
+    daycare: emptyDaycare(),
+    eggs: [],
     towerBest: 0,
     towerRun: 0,
     flags: [],
@@ -407,6 +416,96 @@ export function hallTime(seconds: number): string {
   return `${heures} h ${String(minutes).padStart(2, "0")}`;
 }
 
+/**
+ * Recharge les PP d'un Pokémon de l'équipe. `move` est le rang de l'attaque
+ * visée ; un Élixir sert tout le répertoire et l'ignore.
+ */
+export function applyPP(
+  state: GameState,
+  item: ItemId,
+  index: number,
+  move: number,
+): { state: GameState; message: string } {
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
+  const mon = state.party[index];
+  const { refus } = ppEffectOn(item, mon, move);
+  if (refus) return { state, message: refus };
+
+  const moves = refillPP(item, mon, move);
+  return {
+    state: {
+      ...state,
+      bag: spend(state.bag, item),
+      party: state.party.map((m, i) => (i === index ? { ...m, moves } : m)),
+    },
+    message: ITEMS[item].pp?.toutes
+      ? `${mon.name} retrouve ses PP.`
+      : `${MOVES[moves[move].id].name} retrouve des PP.`,
+  };
+}
+
+/* -------------------------------------------------- Maître des Capacités */
+
+/** Ce que coûte le réapprentissage d'une attaque oubliée. */
+export const RELEARN_PRICE = 800;
+
+/**
+ * Les attaques que ce Pokémon pourrait connaître à son niveau et qu'il ne
+ * connaît plus. Les espèces écrites à la main puisent dans leur
+ * apprentissage ; les autres, dans le répertoire déduit de leurs types.
+ */
+export function relearnable(mon: Mon): MoveId[] {
+  const kind = species(mon.id);
+  const possibles = kind.learnset.length
+    ? kind.learnset.filter((l) => l.level <= mon.level).map((l) => l.move)
+    : typedMoveset(kind.types, mon.level);
+  const connues = new Set(mon.moves.map((m) => m.id));
+  return [...new Set(possibles)].filter((id) => !connues.has(id));
+}
+
+/**
+ * Réapprend une attaque contre monnaie sonnante. `oubli` dit laquelle céder
+ * quand les quatre emplacements sont pris ; il vaut -1 sinon.
+ */
+export function relearnMove(
+  state: GameState,
+  index: number,
+  move: MoveId,
+  oubli: number,
+): { state: GameState; message: string } {
+  const mon = state.party[index];
+  if (!mon) return { state, message: "Aucun Pokémon." };
+  if (state.money < RELEARN_PRICE) {
+    return { state, message: "Vous n'avez pas de quoi me payer." };
+  }
+  if (!relearnable(mon).includes(move)) {
+    return { state, message: `${mon.name} ne peut pas apprendre cela.` };
+  }
+
+  const neuf = { id: move, pp: MOVES[move].pp, max: MOVES[move].pp };
+  const complet = mon.moves.length >= 4;
+  if (complet && (oubli < 0 || oubli >= mon.moves.length)) {
+    return { state, message: "Il faut choisir une attaque à oublier." };
+  }
+  const oubliee = complet ? MOVES[mon.moves[oubli].id].name : null;
+  const moves = complet
+    ? mon.moves.map((m, i) => (i === oubli ? neuf : m))
+    : [...mon.moves, neuf];
+
+  return {
+    state: {
+      ...state,
+      money: state.money - RELEARN_PRICE,
+      party: state.party.map((m, i) => (i === index ? { ...m, moves } : m)),
+    },
+    message: oubliee
+      ? `${mon.name} oublie ${oubliee} et retrouve ${MOVES[move].name} !`
+      : `${mon.name} retrouve ${MOVES[move].name} !`,
+  };
+}
+
 /* ------------------------------------------------------- Tour de Combat */
 
 /**
@@ -656,6 +755,28 @@ export function loadGame(slot: Slot = 1): GameState | null {
 }
 
 /**
+ * Remet un Pokémon d'aplomb : une partie plus ancienne ignore les champs
+ * ajoutés depuis, et un fichier bricolé ne doit pas dépasser les PV maximum.
+ */
+function reviveMon(mon: Mon): Mon {
+  const remis: Mon = {
+    ...mon,
+    shiny: mon.shiny ?? false,
+    status: mon.status ?? null,
+    sleep: mon.sleep ?? 0,
+    // La confusion ne sort jamais du combat.
+    confusion: 0,
+    // Une partie d'avant les natures reçoit la neutre : rien ne change pour
+    // un Pokémon déjà élevé.
+    nature: mon.nature ?? 0,
+    held: mon.held ?? null,
+    hp: 0,
+  };
+  remis.hp = Math.max(0, Math.min(mon.hp, maxHp(remis)));
+  return remis;
+}
+
+/**
  * Remet une sauvegarde d'aplomb : une partie plus ancienne ignore les champs
  * ajoutés depuis, et un fichier bricolé à la main ne doit pas passer.
  * Renvoie `null` si ce n'est pas une sauvegarde de ce jeu.
@@ -684,34 +805,21 @@ export function reviveGame(brut: unknown): GameState | null {
       // Un sacre bricolé à la main ne doit pas casser l'écran : on ne garde
       // que les entrées qui ont bien une équipe.
       hall: (data.hall ?? []).filter((e) => Array.isArray(e?.team)),
+      daycare: {
+        ...emptyDaycare(),
+        ...data.daycare,
+        mons: (data.daycare?.mons ?? []).map(reviveMon),
+        // Un œuf en attente se vérifie comme ceux qu'on porte.
+        ready:
+          typeof data.daycare?.ready?.id === "number" ? data.daycare.ready : null,
+      },
+      eggs: (data.eggs ?? []).filter((e) => typeof e?.id === "number"),
       towerBest: data.towerBest ?? 0,
       // Une série en cours ne survit pas à un rechargement : on repart de zéro.
       towerRun: 0,
-      box: (data.box ?? []).map((mon) => ({
-        ...mon,
-        shiny: mon.shiny ?? false,
-        status: mon.status ?? null,
-        sleep: mon.sleep ?? 0,
-        confusion: 0,
-        // Une partie d'avant les natures reçoit la neutre : rien ne change
-        // pour un Pokémon déjà élevé.
-        nature: mon.nature ?? 0,
-        held: mon.held ?? null,
-        hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
-      })),
+      box: (data.box ?? []).map(reviveMon),
       starter: data.starter ?? data.party[0]?.id,
-      party: data.party.map((mon) => ({
-        ...mon,
-        shiny: mon.shiny ?? false,
-        status: mon.status ?? null,
-        sleep: mon.sleep ?? 0,
-        confusion: 0,
-        // Une partie d'avant les natures reçoit la neutre : rien ne change
-        // pour un Pokémon déjà élevé.
-        nature: mon.nature ?? 0,
-        held: mon.held ?? null,
-        hp: Math.max(0, Math.min(mon.hp, maxHp(mon))),
-      })),
+      party: data.party.map(reviveMon),
     };
   } catch {
     return null;

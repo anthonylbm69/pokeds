@@ -23,6 +23,8 @@ et une Tour de Combat pour l'après-Ligue.
 - le **Pokémon de tête marche derrière vous**, repixellisé à la maille du jeu
 - des **Cars Faure** pour voyager, un vélo, le Surf, un cycle jour / nuit
 - un **PC** dans les Centres, des Capsules Techniques, un sac complet
+- une **Pension** : confiez-en deux, marchez, et un œuf finit par éclore
+- un **Maître des Capacités** qui réveille les attaques oubliées
 - **deux emplacements de sauvegarde** et un export vers un fichier
 
 ## Lancer le jeu

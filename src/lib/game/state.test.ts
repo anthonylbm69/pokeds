@@ -12,6 +12,10 @@ import {
   PARTY_MAX,
   addCaught,
   applyItem,
+  applyPP,
+  RELEARN_PRICE,
+  relearnMove,
+  relearnable,
   followerLine,
   teachMove,
   depositMon,
@@ -337,5 +341,138 @@ describe("les Capsules Techniques", () => {
       expect(ITEMS[ctId(move)].name).toContain(MOVES[move].name);
     }
     expect(new Set(CT_MOVES).size).toBe(CT_MOVES.length);
+  });
+});
+
+describe("les objets de PP, au sac", () => {
+  /** Une partie dont le premier Pokémon a le répertoire à sec. */
+  const àSec = (item: "huile" | "elixir", combien = 1) => {
+    const base = giveStarter(newGame("Anthony"), 495);
+    const mon = base.party[0];
+    return {
+      ...base,
+      bag: { ...base.bag, [item]: combien },
+      party: [{ ...mon, moves: mon.moves.map((m) => ({ ...m, pp: 0 })) }],
+    };
+  };
+
+  it("recharge l'attaque visée et consomme l'objet", () => {
+    const avant = àSec("huile");
+    const { state, message } = applyPP(avant, "huile", 0, 0);
+    expect(state.party[0].moves[0].pp).toBeGreaterThan(0);
+    expect(state.bag.huile).toBe(0);
+    expect(message).toContain("retrouve des PP");
+  });
+
+  it("ne touche pas aux autres attaques", () => {
+    const avant = àSec("huile");
+    expect(avant.party[0].moves.length).toBeGreaterThan(1);
+    const { state } = applyPP(avant, "huile", 0, 0);
+    expect(state.party[0].moves[1].pp).toBe(0);
+  });
+
+  it("l'Élixir sert tout le répertoire d'un coup", () => {
+    const avant = àSec("elixir");
+    const { state, message } = applyPP(avant, "elixir", 0, 0);
+    for (const m of state.party[0].moves) expect(m.pp).toBeGreaterThan(0);
+    expect(message).toContain("retrouve ses PP");
+  });
+
+  it("refuse sans rien dépenser quand le sac est vide", () => {
+    const avant = { ...àSec("huile"), bag: { ...àSec("huile").bag, huile: 0 } };
+    const { state, message } = applyPP(avant, "huile", 0, 0);
+    expect(state).toBe(avant);
+    expect(message).toContain("Vous n'avez plus");
+  });
+
+  it("refuse sans rien dépenser sur un répertoire déjà plein", () => {
+    const base = giveStarter(newGame("Anthony"), 495);
+    const avant = { ...base, bag: { ...base.bag, elixir: 1 } };
+    const { state, message } = applyPP(avant, "elixir", 0, 0);
+    expect(state).toBe(avant);
+    expect(state.bag.elixir).toBe(1);
+    expect(message).toContain("déjà tous ses PP");
+  });
+});
+
+describe("le Maître des Capacités", () => {
+  const partie = (money = 5000) => {
+    const base = giveStarter(newGame("Anthony"), 495);
+    return { ...base, money, party: [{ ...base.party[0], level: 40 }] };
+  };
+
+  it("ne propose que des attaques inconnues du Pokémon", () => {
+    const mon = partie().party[0];
+    const connues = new Set(mon.moves.map((m) => m.id));
+    for (const id of relearnable(mon)) {
+      expect(connues.has(id)).toBe(false);
+      expect(MOVES[id], `${id} inconnue`).toBeDefined();
+    }
+  });
+
+  it("ne propose rien au-dessus du niveau atteint", () => {
+    const bas = { ...partie().party[0], level: 2 };
+    const haut = { ...bas, level: 60 };
+    expect(relearnable(haut).length).toBeGreaterThanOrEqual(relearnable(bas).length);
+  });
+
+  it("apprend contre monnaie quand il reste de la place", () => {
+    const avant = partie();
+    const mon = { ...avant.party[0], moves: avant.party[0].moves.slice(0, 1) };
+    const jeu = { ...avant, party: [mon] };
+    const cible = relearnable(mon)[0];
+    const { state, message } = relearnMove(jeu, 0, cible, -1);
+    expect(state.party[0].moves.map((m) => m.id)).toContain(cible);
+    expect(state.money).toBe(avant.money - RELEARN_PRICE);
+    expect(message).toContain("retrouve");
+  });
+
+  it("échange une attaque quand les quatre emplacements sont pris", () => {
+    const avant = partie();
+    const plein = { ...avant.party[0] };
+    while (plein.moves.length < 4) plein.moves = [...plein.moves, plein.moves[0]];
+    const jeu = { ...avant, party: [{ ...plein, moves: plein.moves.slice(0, 4) }] };
+    const cible = relearnable(jeu.party[0])[0];
+    const perdue = jeu.party[0].moves[2].id;
+    const { state, message } = relearnMove(jeu, 0, cible, 2);
+    expect(state.party[0].moves).toHaveLength(4);
+    expect(state.party[0].moves[2].id).toBe(cible);
+    expect(message).toContain(MOVES[perdue].name);
+  });
+
+  it("réclame un choix d'oubli quand le répertoire est plein", () => {
+    const avant = partie();
+    const plein = { ...avant.party[0] };
+    while (plein.moves.length < 4) plein.moves = [...plein.moves, plein.moves[0]];
+    const jeu = { ...avant, party: [{ ...plein, moves: plein.moves.slice(0, 4) }] };
+    const { state, message } = relearnMove(jeu, 0, relearnable(jeu.party[0])[0], -1);
+    expect(state).toBe(jeu);
+    expect(message).toContain("attaque à oublier");
+  });
+
+  it("refuse sans argent, et ne prélève rien", () => {
+    const pauvre = partie(RELEARN_PRICE - 1);
+    const { state, message } = relearnMove(pauvre, 0, relearnable(pauvre.party[0])[0], -1);
+    expect(state).toBe(pauvre);
+    expect(message).toContain("de quoi me payer");
+  });
+
+  it("refuse une attaque hors de portée du Pokémon", () => {
+    const jeu = partie();
+    const inconnue = (Object.keys(MOVES) as (keyof typeof MOVES)[]).find(
+      (id) => !relearnable(jeu.party[0]).includes(id),
+    )!;
+    const { state, message } = relearnMove(jeu, 0, inconnue, -1);
+    expect(state).toBe(jeu);
+    expect(message).toContain("ne peut pas apprendre");
+  });
+});
+
+describe("la Pension dans la partie", () => {
+  it("commence vide, sans œuf en poche", () => {
+    const jeu = newGame("Anthony");
+    expect(jeu.daycare.mons).toEqual([]);
+    expect(jeu.daycare.ready).toBeNull();
+    expect(jeu.eggs).toEqual([]);
   });
 });

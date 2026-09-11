@@ -21,9 +21,11 @@ export type ItemId =
   | "baie-oran"
   | "roche-royale"
   | "lunettes"
+  | "huile"
+  | "elixir"
   | `ct-${MoveId}`;
 
-export type ItemKind = "ball" | "soin" | "rappel" | "statut" | "ct" | "tenu";
+export type ItemKind = "ball" | "soin" | "rappel" | "statut" | "ct" | "tenu" | "pp";
 
 export type Item = {
   name: string;
@@ -39,6 +41,8 @@ export type Item = {
   teaches?: MoveId;
   /** Ce que l'objet fait quand un Pokémon le porte. */
   hold?: Hold;
+  /** PP rendus. `toutes` sert tout le répertoire d'un coup. */
+  pp?: { amount: number; toutes?: true };
 };
 
 /**
@@ -157,6 +161,10 @@ export const ITEMS: Record<ItemId, Item> = {
     kind: "tenu",
     hold: { power: 1.5, quick: true },
   },
+
+  // Les PP ne se rendaient qu'au Centre : de quoi tenir loin de la ville.
+  huile: { name: "Huile", price: 1200, kind: "pp", pp: { amount: 10 } },
+  elixir: { name: "Élixir", price: 3000, kind: "pp", pp: { amount: 10, toutes: true } },
 };
 
 /** L'ordre des rayons et du sac : du plus courant au plus rare. */
@@ -178,6 +186,8 @@ export const ITEM_ORDER: ItemId[] = [
   "baie-oran",
   "roche-royale",
   "lunettes",
+  "huile",
+  "elixir",
   // Les Capsules ferment la marche : elles sont nombreuses et rares.
   ...CT_MOVES.map(ctId),
 ];
@@ -192,6 +202,7 @@ export const emptyBag = (): Bag => ({
   potion: 0, superpotion: 0, hyperpotion: 0, rappel: 0, totalsoin: 0,
   masterball: 0,
   restes: 0, ceinture: 0, "baie-oran": 0, "roche-royale": 0, lunettes: 0,
+  huile: 0, elixir: 0,
   ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
 } as Bag);
 
@@ -243,6 +254,7 @@ export function effectOn(
 
   const max = maxHp(mon);
   if (data.kind === "ct" || data.kind === "tenu") return { healed: 0, refus: null };
+  if (data.kind === "pp") return { healed: 0, refus: ppEffectOn(item, mon).refus };
   if (data.kind === "statut") {
     if (!mon.status) return { healed: 0, refus: `${mon.name} se porte très bien.` };
     return { healed: 0, refus: null };
@@ -262,6 +274,46 @@ export function effectOn(
 /** Un objet qui se pose sur un Pokémon de l'équipe demande une cible. */
 export const needsTarget = (item: ItemId) =>
   ITEMS[item].kind !== "ball" && ITEMS[item].kind !== "ct";
+
+/** Un objet de PP vise une attaque, ou tout le répertoire. */
+export const isPP = (item: ItemId) => ITEMS[item].kind === "pp";
+
+/**
+ * Ce qu'un objet de PP rendrait à ce Pokémon, et le motif du refus quand il
+ * n'a rien à rendre. `move` est le rang de l'attaque visée ; il est ignoré
+ * par un Élixir, qui sert tout le monde.
+ */
+export function ppEffectOn(
+  item: ItemId,
+  mon: Mon | undefined,
+  move = 0,
+): { refus: string | null } {
+  const regle = ITEMS[item].pp;
+  if (!regle) return { refus: "Cet objet ne rend pas de PP." };
+  if (!mon) return { refus: "Aucun Pokémon à qui le donner." };
+
+  const vises = regle.toutes ? mon.moves : mon.moves.slice(move, move + 1);
+  if (!vises.length) return { refus: "Aucune attaque à recharger." };
+  if (vises.every((m) => m.pp >= m.max)) {
+    return {
+      refus: regle.toutes
+        ? `${mon.name} a déjà tous ses PP.`
+        : "Cette attaque a déjà tous ses PP.",
+    };
+  }
+  return { refus: null };
+}
+
+/** Applique l'objet : renvoie le répertoire rechargé. */
+export function refillPP(item: ItemId, mon: Mon, move = 0): Mon["moves"] {
+  const regle = ITEMS[item].pp;
+  if (!regle) return mon.moves;
+  return mon.moves.map((m, i) =>
+    regle.toutes || i === move
+      ? { ...m, pp: Math.min(m.max, m.pp + regle.amount) }
+      : m,
+  );
+}
 
 /** Une CT s'enseigne hors combat, et seulement là. */
 export const isCT = (item: ItemId) => ITEMS[item].kind === "ct";

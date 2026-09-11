@@ -7,8 +7,11 @@ import {
   countOf,
   effectOn,
   emptyBag,
+  isPP,
   needsTarget,
   normaliseBag,
+  ppEffectOn,
+  refillPP,
   spend,
   startingBag,
   type Bag,
@@ -191,5 +194,83 @@ describe("le bonus de capture", () => {
     const simple = prises("ball");
     const hyper = prises("hyperball");
     expect(hyper, `${hyper} contre ${simple}`).toBeGreaterThan(simple);
+  });
+});
+
+describe("l'Huile et l'Élixir", () => {
+  /** Un Pokémon dont le répertoire est entamé, à volonté. */
+  const usagé = (restants: number[]) => {
+    const mon = createMon(495, 20, false);
+    mon.moves = mon.moves.map((m, i) => ({ ...m, pp: restants[i] ?? m.max }));
+    return mon;
+  };
+
+  it("se reconnaissent comme objets de PP", () => {
+    expect(isPP("huile")).toBe(true);
+    expect(isPP("elixir")).toBe(true);
+    expect(isPP("potion")).toBe(false);
+    expect(isPP("ball")).toBe(false);
+  });
+
+  it("se posent sur un Pokémon de l'équipe", () => {
+    expect(needsTarget("huile")).toBe(true);
+    expect(needsTarget("elixir")).toBe(true);
+  });
+
+  it("l'Élixir sert tout le répertoire, l'Huile une seule attaque", () => {
+    expect(ITEMS.huile.pp?.toutes).toBeUndefined();
+    expect(ITEMS.elixir.pp?.toutes).toBe(true);
+    expect(ITEMS.elixir.price).toBeGreaterThan(ITEMS.huile.price);
+  });
+
+  it("rendent des PP à l'attaque visée, sans toucher aux autres", () => {
+    const mon = usagé([0, 0]);
+    const moves = refillPP("huile", mon, 1);
+    expect(moves[0].pp).toBe(0);
+    expect(moves[1].pp).toBe(Math.min(moves[1].max, ITEMS.huile.pp!.amount));
+  });
+
+  it("l'Élixir recharge tout d'un coup", () => {
+    const mon = usagé([0, 0, 0]);
+    const moves = refillPP("elixir", mon, 0);
+    for (const m of moves) expect(m.pp).toBeGreaterThan(0);
+  });
+
+  it("ne dépassent jamais le maximum", () => {
+    const mon = usagé([]);
+    for (const m of refillPP("elixir", mon, 0)) expect(m.pp).toBe(m.max);
+  });
+
+  it("refusent une attaque déjà pleine", () => {
+    const mon = usagé([]);
+    expect(ppEffectOn("huile", mon, 0).refus).toContain("déjà tous ses PP");
+    expect(ppEffectOn("elixir", mon).refus).toContain("déjà tous ses PP");
+  });
+
+  it("acceptent dès qu'une seule attaque est entamée", () => {
+    const mon = usagé([0]);
+    expect(ppEffectOn("huile", mon, 0).refus).toBeNull();
+    expect(ppEffectOn("elixir", mon).refus).toBeNull();
+    // Mais l'Huile visée sur une attaque pleine refuse toujours.
+    expect(ppEffectOn("huile", mon, 1).refus).not.toBeNull();
+  });
+
+  it("refusent poliment quand il n'y a personne", () => {
+    expect(ppEffectOn("huile", undefined).refus).toContain("Aucun Pokémon");
+    expect(ppEffectOn("potion", usagé([0])).refus).toContain("ne rend pas de PP");
+  });
+
+  it("ne rendent pas de PV : `effectOn` relaie le refus", () => {
+    const mon = usagé([]);
+    mon.hp = 1;
+    const { healed, refus } = effectOn("elixir", mon);
+    expect(healed).toBe(0);
+    expect(refus).toContain("déjà tous ses PP");
+  });
+
+  it("laissent le répertoire d'origine intact", () => {
+    const mon = usagé([0]);
+    refillPP("elixir", mon, 0);
+    expect(mon.moves[0].pp).toBe(0);
   });
 });
