@@ -7,6 +7,7 @@ import { atNight, momentNow } from "@/lib/game/heure";
 import { WILD_POOL } from "@/lib/game/dex";
 import { hatch, walkDaycare, walkEggs } from "@/lib/game/elevage";
 import { CAST_LINES, NOTHING_LINE, castRod } from "@/lib/game/peche";
+import { skyAt, weatherOf } from "@/lib/game/ciel";
 import { MAX_LEVEL, species, type MoveId } from "@/lib/game/data";
 import {
   ITEM_ORDER,
@@ -26,6 +27,7 @@ import {
   healMon,
   isKo,
   maxHp,
+  WEATHER_FR,
   startTrainer,
   startWild,
   type BattleState,
@@ -206,6 +208,12 @@ export function useGame({
   /* ------------------------------------------------------------- PNJ */
 
   const map = MAPS[game.map];
+
+  /**
+   * Le ciel du moment. Il ne vit nulle part : il se retrouve à partir du lieu
+   * et de l'heure, donc il survit à un rechargement sans être sauvegardé.
+   */
+  const ciel = skyAt(map, game.map);
 
   const npcs = useMemo<NpcSpec[]>(
     () =>
@@ -402,18 +410,19 @@ export function useGame({
   const startWildBattle = useCallback(
     (id: number, level: number) => {
       const foe = createMon(id, level);
-      const state = startWild(game.party, foe, game.bag);
+      const state = startWild(game.party, foe, game.bag, weatherOf(ciel));
       openBattle(
         state,
         [
           `Un ${foe.name} sauvage apparaît !`,
+          ...(ciel === "beau" ? [] : [WEATHER_FR[ciel]]),
           ...(foe.shiny ? ["✦ Sa livrée scintille d'un éclat rare !"] : []),
           `En avant, ${activeMon(state).name} !`,
         ],
         { kind: "sauvage" },
       );
     },
-    [game, openBattle],
+    [game, ciel, openBattle],
   );
 
   /**
@@ -458,18 +467,19 @@ export function useGame({
         title: npc.trainer.title,
         // Une revanche paie le double : ils reviennent nettement plus forts.
         reward: npc.trainer.reward * (revanche ? 2 : 1),
-      }, game.bag);
+      }, game.bag, weatherOf(ciel));
       openBattle(
         state,
         [
           `${npc.trainer.title} ${npc.trainer.name} veut se battre !`,
+          ...(ciel === "beau" ? [] : [WEATHER_FR[ciel]]),
           `${npc.trainer.name} envoie ${state.foe.name} !`,
           `En avant, ${activeMon(state).name} !`,
         ],
         { kind: "dresseur", npc: npcId, revanche },
       );
     },
-    [game, npcById, openBattle],
+    [game, ciel, npcById, openBattle],
   );
 
   /**

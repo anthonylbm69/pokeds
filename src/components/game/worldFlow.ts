@@ -23,6 +23,7 @@ import {
 } from "@/lib/game/items";
 import { abilityName, abilityWorks, natureName } from "@/lib/game/traits";
 import { MOMENT_FR, momentNow } from "@/lib/game/heure";
+import { CIEL_FR, skyAt } from "@/lib/game/ciel";
 import { DAYCARE_MAX, canBreed, eggHint } from "@/lib/game/elevage";
 import { BUS_STOPS, MAPS, type MapId } from "@/lib/game/world";
 import {
@@ -922,7 +923,11 @@ export function worldScreen(
           sub: game.party.length ? `${game.party.length} Pokémon` : "—",
           disabled: !game.party.length,
         },
-        { id: "carte", label: "RÉGION", sub: MOMENT_FR[momentNow()] },
+        {
+          id: "carte",
+          label: "RÉGION",
+          sub: `${MOMENT_FR[momentNow()]} · ${CIEL_FR[skyAt(MAPS[game.map], game.map)]}`,
+        },
         { id: "dex", label: "POKÉDEX", sub: `${game.caught.length} capturés` },
         { id: "save", label: "SAUVER", sub: "X · emplacements et fichier" },
         { id: "music", label: "MUSIQUE", sub: game.music ? "activée" : "coupée" },

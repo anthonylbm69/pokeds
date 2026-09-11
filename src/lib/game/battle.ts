@@ -413,8 +413,11 @@ export type BattleState = {
   mustSwitch: boolean;
   /** Camp qui recule ce tour-ci, s'il n'avait pas encore joué. */
   flinched?: "mine" | "foe";
-  /** Temps qu'il fait, et pour combien de tours encore. */
-  weather?: { kind: Weather; turns: number };
+  /**
+   * Temps qu'il fait, et pour combien de tours encore. `dehors` marque le
+   * ciel du lieu : il ne se dissipe pas, le duel entier se joue sous lui.
+   */
+  weather?: { kind: Weather; turns: number; dehors?: true };
   runAttempts: number;
 };
 
@@ -427,10 +430,16 @@ const clearConfusion = (mons: Mon[]) => {
   for (const m of mons) m.confusion = 0;
 };
 
-export function startWild(party: Mon[], foe: Mon, bag: Bag): BattleState {
+export function startWild(
+  party: Mon[],
+  foe: Mon,
+  bag: Bag,
+  ciel?: Weather,
+): BattleState {
   clearConfusion(party);
   foe.confusion = 0;
   return {
+    ...(ciel ? { weather: { kind: ciel, turns: 0, dehors: true as const } } : {}),
     kind: "sauvage",
     party,
     active: party.findIndex((m) => !isKo(m)),
@@ -452,9 +461,11 @@ export function startTrainer(
   team: Mon[],
   trainer: { name: string; title: string; reward: number },
   bag: Bag,
+  ciel?: Weather,
 ): BattleState {
   clearConfusion([...party, ...team]);
   return {
+    ...(ciel ? { weather: { kind: ciel, turns: 0, dehors: true as const } } : {}),
     kind: "dresseur",
     party,
     active: party.findIndex((m) => !isKo(m)),
@@ -1060,6 +1071,9 @@ function weatherTick(state: BattleState, messages: string[]): void {
       if (isKo(mon)) tombe(mon, mine, messages);
     }
   }
+
+  // Le ciel du lieu tient tout le duel ; seule une attaque s'essouffle.
+  if (state.weather.dehors) return;
 
   state.weather.turns -= 1;
   if (state.weather.turns <= 0) {

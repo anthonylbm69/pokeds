@@ -23,6 +23,7 @@ import {
   type NpcSpec,
 } from "@/lib/game/world";
 import { TINT, momentNow } from "@/lib/game/heure";
+import { skyAt, type Ciel } from "@/lib/game/ciel";
 import type { DsButton } from "../DSConsole";
 
 export type PlayerPos = {
@@ -61,6 +62,77 @@ type Props = {
   follower: { id: number; shiny: boolean } | null;
   onStep: (x: number, y: number) => void;
 };
+
+/**
+ * Le temps posé sur la scène. Les traits ne sont pas tirés au sort à chaque
+ * image : leur position se calcule à partir de leur rang et de l'horloge,
+ * donc la pluie tombe droit au lieu de grésiller.
+ */
+function drawCiel(ctx: CanvasRenderingContext2D, ciel: Ciel, elapsed: number) {
+  if (ciel === "beau") return;
+  ctx.save();
+
+  if (ciel === "pluie") {
+    // Un voile bleu, puis les gouttes, en deux nappes de vitesses différentes.
+    ctx.fillStyle = "#1b2a44";
+    ctx.globalAlpha = 0.22;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = "#cfe0f5";
+    ctx.lineWidth = 1;
+    for (let nappe = 0; nappe < 2; nappe++) {
+      const vitesse = nappe ? 0.62 : 0.94;
+      const longueur = nappe ? 9 : 14;
+      ctx.beginPath();
+      for (let i = 0; i < 70; i++) {
+        const x = (i * 97 + nappe * 41) % (VIEW_W + 40);
+        const y = (i * 53 + elapsed * vitesse) % (VIEW_H + 40);
+        ctx.moveTo(x, y - 40);
+        ctx.lineTo(x - longueur / 2, y - 40 + longueur);
+      }
+      ctx.stroke();
+    }
+  }
+
+  if (ciel === "soleil") {
+    // Rien qui tombe : une lumière chaude et un halo au centre.
+    ctx.fillStyle = "#ffd98a";
+    ctx.globalAlpha = 0.16;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    const halo = ctx.createRadialGradient(
+      VIEW_W * 0.78, VIEW_H * 0.16, 8,
+      VIEW_W * 0.78, VIEW_H * 0.16, VIEW_H * 0.75,
+    );
+    halo.addColorStop(0, "rgba(255, 246, 205, 0.55)");
+    halo.addColorStop(1, "rgba(255, 246, 205, 0)");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+
+  if (ciel === "sable") {
+    ctx.fillStyle = "#c9a36a";
+    ctx.globalAlpha = 0.24;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    // Le sable file à l'horizontale, par rafales larges.
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = "#f0dcb4";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 46; i++) {
+      const y = (i * 71) % VIEW_H;
+      const x = (i * 131 + elapsed * 1.4) % (VIEW_W + 80);
+      ctx.moveTo(x - 80, y);
+      ctx.lineTo(x - 80 + 22 + (i % 3) * 9, y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
 
 /** Comment dire une direction et un décor, pour qui ne voit pas l'écran. */
 const DIR_FR: Record<Dir, string> = {
@@ -358,6 +430,9 @@ export default function WorldView({
           ctx.restore();
         }
       }
+
+      // Le ciel passe devant tout le reste : on est dessous, pas dedans.
+      drawCiel(ctx, skyAt(map, latest.current.mapId), elapsed);
     };
 
     const loop = (now: number) => {
