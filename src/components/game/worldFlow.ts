@@ -16,6 +16,7 @@ import {
   effectOn,
   isHeld,
   isPP,
+  isRod,
   isStone,
   ppEffectOn,
   type ItemId,
@@ -55,6 +56,7 @@ export type Then =
   | { do: "revanche"; npc: string }
   | { do: "tour" }
   | { do: "pantheon" }
+  | { do: "peche"; id: number; level: number }
   | { do: "pension" }
   | { do: "maitre" }
   | { do: "statique"; npc: string }
@@ -280,6 +282,24 @@ export function worldScreen(
             ],
           };
         }
+        // Une canne ne vise personne : elle part à l'eau, ou nulle part.
+        if (isRod(item)) {
+          return {
+            title: `${ITEMS[item].name}`,
+            hint: "A pour lancer · B pour revenir",
+            layout: "list",
+            list: [
+              {
+                id: "lancer",
+                label: "LANCER LA LIGNE",
+                sub: "il faut se tenir face à l'eau",
+                tone: "fight" as const,
+              },
+              back,
+            ],
+          };
+        }
+
         // Une pierre ne vaut que pour qui elle fait changer : on le dit sur
         // chaque ligne plutôt que de laisser chercher.
         if (isStone(item)) {

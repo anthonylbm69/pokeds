@@ -24,7 +24,26 @@ export type ItemId =
   | "huile"
   | "elixir"
   | StoneId
+  | RodId
   | `ct-${MoveId}`;
+
+/** Les trois cannes, de la plus modeste à la plus sérieuse. */
+export const RODS = ["canne", "bonne-canne", "super-canne"] as const;
+
+export type RodId = (typeof RODS)[number];
+
+/**
+ * Ce que vaut chaque canne : la chance qu'une prise morde, et la tranche de
+ * niveaux qu'elle ramène. La première se reçoit, les deux autres se paient.
+ */
+export const ROD_SPECS: Record<
+  RodId,
+  { name: string; price: number; bite: number; levels: [number, number] }
+> = {
+  canne: { name: "Canne", price: 0, bite: 0.5, levels: [5, 15] },
+  "bonne-canne": { name: "Bonne Canne", price: 4000, bite: 0.65, levels: [15, 30] },
+  "super-canne": { name: "Super Canne", price: 9000, bite: 0.8, levels: [30, 45] },
+};
 
 /**
  * Les pierres d'évolution. La liste vient du Pokédex lui-même : chaque
@@ -67,7 +86,8 @@ export type ItemKind =
   | "ct"
   | "tenu"
   | "pp"
-  | "pierre";
+  | "pierre"
+  | "canne";
 
 export type Item = {
   name: string;
@@ -147,6 +167,13 @@ export const ctMove = (id: ItemId): MoveId | null =>
 const ctPrice = (move: MoveId) =>
   Math.max(1500, Math.round((MOVES[move].power || 60) * 40));
 
+const ROD_ITEMS = Object.fromEntries(
+  RODS.map((rod) => [
+    rod,
+    { name: ROD_SPECS[rod].name, price: ROD_SPECS[rod].price, kind: "canne" as const },
+  ]),
+) as Record<ItemId, Item>;
+
 /** Une pierre coûte cher : elle saute des niveaux entiers d'élevage. */
 const STONE_PRICE = 2100;
 
@@ -172,6 +199,7 @@ const CT_ITEMS = Object.fromEntries(
 export const ITEMS: Record<ItemId, Item> = {
   ...CT_ITEMS,
   ...STONE_ITEMS,
+  ...ROD_ITEMS,
   ball: { name: "Poké Ball", price: 200, kind: "ball", bonus: 1 },
   superball: { name: "Super Ball", price: 600, kind: "ball", bonus: 1.5 },
   hyperball: { name: "Hyper Ball", price: 1200, kind: "ball", bonus: 2 },
@@ -241,6 +269,7 @@ export const ITEM_ORDER: ItemId[] = [
   "lunettes",
   "huile",
   "elixir",
+  ...RODS,
   ...STONES,
   // Les Capsules ferment la marche : elles sont nombreuses et rares.
   ...CT_MOVES.map(ctId),
@@ -257,6 +286,7 @@ export const emptyBag = (): Bag => ({
   masterball: 0,
   restes: 0, ceinture: 0, "baie-oran": 0, "roche-royale": 0, lunettes: 0,
   huile: 0, elixir: 0,
+  ...Object.fromEntries(RODS.map((r) => [r, 0])),
   ...Object.fromEntries(STONES.map((s) => [s, 0])),
   ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
 } as Bag);
@@ -369,6 +399,12 @@ export function refillPP(item: ItemId, mon: Mon, move = 0): Mon["moves"] {
       : m,
   );
 }
+
+/**
+ * Une canne ne se pose sur personne : elle se lance à l'eau, et ne se
+ * consomme jamais.
+ */
+export const isRod = (item: ItemId): item is RodId => ITEMS[item].kind === "canne";
 
 /** Une pierre ne se pose que sur une espèce qu'elle fait changer. */
 export const isStone = (item: ItemId): item is StoneId =>

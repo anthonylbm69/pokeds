@@ -6,6 +6,7 @@ import { TRACKS, music, trackForMap, type TrackId } from "@/lib/game/music";
 import { atNight, momentNow } from "@/lib/game/heure";
 import { WILD_POOL } from "@/lib/game/dex";
 import { hatch, walkDaycare, walkEggs } from "@/lib/game/elevage";
+import { CAST_LINES, NOTHING_LINE, castRod } from "@/lib/game/peche";
 import { MAX_LEVEL, species, type MoveId } from "@/lib/game/data";
 import {
   ITEM_ORDER,
@@ -15,6 +16,7 @@ import {
   ctMove,
   isHeld,
   isPP,
+  isRod,
   isStone,
   type ItemId,
 } from "@/lib/game/items";
@@ -266,6 +268,23 @@ export function useGame({
           ],
           i: 0,
           then: { do: "revanche", npc: npc.id },
+        });
+        return;
+      }
+      if (npc.gift && !hasFlag(game, `don:${npc.id}`)) {
+        const { item, lines } = npc.gift;
+        const next = withFlag(
+          { ...game, bag: add(game.bag, item, 1) },
+          `don:${npc.id}`,
+        );
+        setGame(next);
+        saveGame({ ...next, x: player.current.x, y: player.current.y, dir: player.current.dir });
+        music.sfx("soin");
+        setPhase({
+          kind: "text",
+          lines: [...lines, `Vous recevez : ${ITEMS[item].name} !`],
+          i: 0,
+          then: null,
         });
         return;
       }
@@ -1002,6 +1021,9 @@ export function useGame({
           setCursor(0);
           setPhase({ kind: "tour" });
           break;
+        case "peche":
+          startWildBattle(then.id, then.level);
+          break;
         case "pension":
           setCursor(0);
           setPhase({ kind: "pension", on: "menu", message: null });
@@ -1045,7 +1067,7 @@ export function useGame({
           setPhase({ kind: "world" });
       }
     },
-    [game, aBaptiser, startTrainerBattle, startStaticBattle],
+    [game, aBaptiser, startTrainerBattle, startStaticBattle, startWildBattle],
   );
 
   /** Achat d'un article : le comptoir reste ouvert pour enchaîner. */
@@ -1477,6 +1499,49 @@ export function useGame({
           return;
         }
 
+        if (isRod(item)) {
+          const p = player.current;
+          const { dx, dy } = STEP[p.dir];
+          const devant = { x: Math.round(p.x) + dx, y: Math.round(p.y) + dy };
+          if (!isWater(map, devant.x, devant.y)) {
+            setCursor(0);
+            setPhase({
+              kind: "sac",
+              on: "objets",
+              message: "Il n'y a pas d'eau devant vous.",
+            });
+            return;
+          }
+          if (!game.party.some((m) => !isKo(m))) {
+            setCursor(0);
+            setPhase({
+              kind: "sac",
+              on: "objets",
+              message: "Aucun Pokémon en état de relever une prise.",
+            });
+            return;
+          }
+          const prise = castRod(item);
+          music.sfx("ball");
+          if (!prise) {
+            setPhase({
+              kind: "text",
+              lines: [...CAST_LINES(item), NOTHING_LINE],
+              i: 0,
+              then: null,
+            });
+            return;
+          }
+          // La prise mord : le combat s'ouvre après le lancer.
+          setPhase({
+            kind: "text",
+            lines: [...CAST_LINES(item), "… Ça mord !"],
+            i: 0,
+            then: { do: "peche", id: prise.id, level: prise.level },
+          });
+          return;
+        }
+
         if (isStone(item)) {
           const rang = Number(choice.id.split(":")[1]);
           const { state: apres, messages } = applyStone(game, item, rang);
@@ -1639,7 +1704,7 @@ export function useGame({
         else if (choice.id === "title") onExit();
       }
     },
-    [choices, phase, game, battleUi, draftName, chooseStarter, runTurn, startTowerBattle, save, saveTo, downloadSave, uploadSave, buy, onOpenDex, onExit],
+    [choices, phase, game, map, battleUi, draftName, chooseStarter, runTurn, startTowerBattle, save, saveTo, downloadSave, uploadSave, buy, onOpenDex, onExit],
   );
 
   const moveCursor = useCallback(

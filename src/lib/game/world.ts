@@ -91,6 +91,8 @@ export type NpcSpec = {
   daycare?: boolean;
   /** Réapprend les attaques oubliées, contre monnaie. */
   relearn?: boolean;
+  /** Ce que ce personnage remet, une fois pour toutes. */
+  gift?: { item: ItemId; lines: string[] };
   lines: string[];
   trainer?: TrainerSpec;
   /** Soigne l'équipe après la réplique. */
@@ -519,6 +521,14 @@ export const MAPS: Record<MapId, MapSpec> = {
         y: 7,
         dir: "down",
         sprite: "villageois",
+        gift: {
+          item: "canne",
+          lines: [
+            "Tiens, prends celle-ci. J'en ai trois, et deux bras.",
+            "Mets-toi face à l'eau, sors-la du sac, et sois patient.",
+            "Les bonnes cannes, elles, se paient. Demande en boutique.",
+          ],
+        },
         lines: [
           "L'étang de la Route 3 est calme aujourd'hui.",
           "Au nord, la ville de Maillard : Centre Pokémon, Arène et même un marchand de vélos !",
