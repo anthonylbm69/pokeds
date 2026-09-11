@@ -5,11 +5,17 @@
  */
 
 import {
+  BONHEUR_DEPART,
+  BONHEUR_KO,
+  BONHEUR_MAX,
+  BONHEUR_NIVEAU,
+  BONHEUR_SOIN,
   MAX_LEVEL,
   MOVES,
   type Weather,
   effectiveness,
   computeStat,
+  evolutionOnLevel,
   expForLevel,
   expGain,
   species,
@@ -18,6 +24,7 @@ import {
   type StatKey,
   type TypeName,
 } from "./data";
+import { momentNow } from "./heure";
 import {
   ITEMS,
   countOf,
@@ -54,6 +61,11 @@ export type Mon = {
   nature: number;
   /** Objet confié. Il agit tant qu'il est porté ; une Baie se consomme. */
   held: ItemId | null;
+  /**
+   * Attachement à son dresseur. Deux lignées n'évoluent que par lui, et
+   * seulement au bon moment de la journée.
+   */
+  bonheur: number;
 };
 
 export type Status = "poison" | "brulure" | "paralysie" | "sommeil" | "gel";
@@ -162,6 +174,7 @@ export function createMon(id: number, level: number, shiny?: boolean): Mon {
     confusion: 0,
     nature: roll(NATURES.length),
     held: null,
+    bonheur: BONHEUR_DEPART,
   };
   mon.hp = maxHp(mon);
   return mon;
@@ -181,9 +194,40 @@ export const typesOf = (mon: Mon): TypeName[] => species(mon.id).types;
 
 export const isKo = (mon: Mon) => mon.hp <= 0;
 
+/**
+ * Le message de K.O., et ce qu'il coûte : un Pokémon du joueur qui tombe
+ * perd un peu de l'attachement qu'il avait pour lui.
+ */
+function tombe(mon: Mon, mine: boolean, messages: string[]) {
+  messages.push(`${who(mon, mine)} est K.O. !`);
+  if (mine) {
+    mon.bonheur = Math.max(0, (mon.bonheur ?? BONHEUR_DEPART) - BONHEUR_KO);
+  }
+}
+
+/**
+ * Fait passer une créature à sa forme suivante, en lui laissant les PV
+ * gagnés au passage. Un surnom se garde : seul un nom d'espèce suit
+ * l'espèce. Rend ce qu'il y a à dire.
+ */
+export function evolve(mon: Mon, into: number): string[] {
+  const avant = maxHp(mon);
+  const from = mon.name;
+  const baptise = mon.name !== species(mon.id).name;
+  mon.id = into;
+  if (!baptise) mon.name = species(into).name;
+  mon.hp = Math.min(maxHp(mon), mon.hp + (maxHp(mon) - avant));
+  return [
+    `Quoi ? ${from} évolue !`,
+    `Félicitations ! ${from} a évolué en ${species(into).name} !`,
+  ];
+}
+
 export function healMon(mon: Mon): Mon {
   return {
     ...mon,
+    // Se faire soigner rapproche : c'est ainsi que monte le bonheur ici.
+    bonheur: Math.min(BONHEUR_MAX, (mon.bonheur ?? BONHEUR_DEPART) + BONHEUR_SOIN),
     hp: maxHp(mon),
     moves: mon.moves.map((m) => ({ ...m, pp: m.max })),
     status: null,
@@ -298,7 +342,7 @@ function throughConfusion(mon: Mon, mine: boolean, messages: string[]): boolean 
   const degats = Math.max(1, Math.floor(maxHp(mon) * 0.08));
   mon.hp = Math.max(0, mon.hp - degats);
   messages.push(`Il se blesse dans sa confusion !`);
-  if (isKo(mon)) messages.push(`${who(mon, mine)} est K.O. !`);
+  if (isKo(mon)) tombe(mon, mine, messages);
   return false;
 }
 
@@ -337,7 +381,7 @@ function residual(mon: Mon, mine: boolean, messages: string[]): void {
       ? `${who(mon, mine)} souffre du poison !`
       : `${who(mon, mine)} souffre de sa brûlure !`,
   );
-  if (isKo(mon)) messages.push(`${who(mon, mine)} est K.O. !`);
+  if (isKo(mon)) tombe(mon, mine, messages);
 }
 
 /** Multiplicateur d'un cran de statistique (−6 à +6). */
@@ -601,11 +645,11 @@ function applyMove(
     const retour = Math.max(1, Math.floor(porte * mv.recoil));
     attacker.hp = Math.max(0, attacker.hp - retour);
     messages.push(`${who(attacker, fromPlayer)} accuse le contrecoup !`);
-    if (isKo(attacker)) messages.push(`${who(attacker, fromPlayer)} est K.O. !`);
+    if (isKo(attacker)) tombe(attacker, fromPlayer, messages);
   }
 
   if (isKo(defender)) {
-    messages.push(`${who(defender, !fromPlayer)} est K.O. !`);
+    tombe(defender, !fromPlayer, messages);
     return;
   }
 
@@ -785,16 +829,13 @@ function grantTo(
       }
     }
 
+    // Un niveau gagné rapproche la créature de son dresseur.
+    mon.bonheur = Math.min(BONHEUR_MAX, (mon.bonheur ?? BONHEUR_DEPART) + BONHEUR_NIVEAU);
+
     // L'évolution suit immédiatement le niveau atteint, comme dans le jeu.
-    const form = species(mon.id);
-    if (form.evolvesInto && form.evolvesAt && mon.level >= form.evolvesAt) {
-      const hpBefore = maxHp(mon);
-      const from = mon.name;
-      mon.id = form.evolvesInto;
-      mon.name = species(mon.id).name;
-      mon.hp = Math.min(maxHp(mon), mon.hp + (maxHp(mon) - hpBefore));
-      messages.push(`Quoi ? ${from} évolue !`);
-      messages.push(`Félicitations ! ${from} a évolué en ${mon.name} !`);
+    const branche = evolutionOnLevel(mon.id, mon.level, mon.bonheur, momentNow());
+    if (branche) {
+      messages.push(...evolve(mon, branche.into));
     }
   }
 }
@@ -1016,7 +1057,7 @@ function weatherTick(state: BattleState, messages: string[]): void {
       const perte = Math.max(1, Math.floor(maxHp(mon) / 16));
       mon.hp = Math.max(0, mon.hp - perte);
       messages.push(`${who(mon, mine)} est fouetté par le sable !`);
-      if (isKo(mon)) messages.push(`${who(mon, mine)} est K.O. !`);
+      if (isKo(mon)) tombe(mon, mine, messages);
     }
   }
 

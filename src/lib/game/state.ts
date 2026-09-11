@@ -3,13 +3,22 @@
  * pour que `localStorage` suffise.
  */
 
-import { MOVES, species, typedMoveset, type MoveId, type TypeName } from "./data";
-import { STATUS_FR, createMon, healMon, maxHp, type Mon } from "./battle";
+import {
+  BONHEUR_DEPART,
+  MOVES,
+  evolutionByStone,
+  species,
+  typedMoveset,
+  type MoveId,
+  type TypeName,
+} from "./data";
+import { STATUS_FR, createMon, evolve, healMon, maxHp, type Mon } from "./battle";
 import {
   ITEMS,
   countOf,
   ctMove,
   effectOn,
+  isStone,
   normaliseBag,
   ppEffectOn,
   refillPP,
@@ -446,6 +455,56 @@ export function applyPP(
   };
 }
 
+/* ------------------------------------------------------------- pierres */
+
+/** Ce qu'une pierre ferait à ce Pokémon, et pourquoi elle ne ferait rien. */
+export function stoneEffectOn(
+  item: ItemId,
+  mon: Mon | undefined,
+): { into: number | null; refus: string | null } {
+  if (!isStone(item)) return { into: null, refus: "Ceci n'est pas une pierre." };
+  if (!mon) return { into: null, refus: "Aucun Pokémon à qui la donner." };
+  const branche = evolutionByStone(mon.id, item);
+  if (!branche) {
+    return { into: null, refus: `${ITEMS[item].name} n'a aucun effet sur ${mon.name}.` };
+  }
+  return { into: branche.into, refus: null };
+}
+
+/**
+ * Emploie une pierre sur un Pokémon de l'équipe. Elle se consomme, et la
+ * créature change de forme sur-le-champ.
+ */
+export function applyStone(
+  state: GameState,
+  item: ItemId,
+  index: number,
+): { state: GameState; messages: string[] } {
+  if (countOf(state.bag, item) <= 0) {
+    return { state, messages: [`Vous n'avez plus de ${ITEMS[item].name} !`] };
+  }
+  const mon = state.party[index];
+  const { into, refus } = stoneEffectOn(item, mon);
+  if (refus || into === null) return { state, messages: [refus ?? "Rien ne se passe."] };
+
+  // `evolve` travaille sur place : on lui donne une copie.
+  const change = { ...mon, moves: mon.moves.map((m) => ({ ...m })) };
+  const messages = evolve(change, into);
+  const suite = markSeen(
+    {
+      ...state,
+      bag: spend(state.bag, item),
+      party: state.party.map((m, i) => (i === index ? change : m)),
+    },
+    change.id,
+  );
+  // La nouvelle forme entre au Pokédex : on l'a bel et bien en main.
+  return {
+    state: { ...suite, caught: [...new Set([...suite.caught, change.id])] },
+    messages,
+  };
+}
+
 /* -------------------------------------------------- Maître des Capacités */
 
 /** Ce que coûte le réapprentissage d'une attaque oubliée. */
@@ -770,6 +829,8 @@ function reviveMon(mon: Mon): Mon {
     // un Pokémon déjà élevé.
     nature: mon.nature ?? 0,
     held: mon.held ?? null,
+    // Une partie d'avant le bonheur repart de la valeur de départ.
+    bonheur: mon.bonheur ?? BONHEUR_DEPART,
     hp: 0,
   };
   remis.hp = Math.max(0, Math.min(mon.hp, maxHp(remis)));

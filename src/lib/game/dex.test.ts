@@ -40,11 +40,23 @@ describe("le Pokédex national", () => {
   });
 
   it("ne fait évoluer que vers des espèces qu'il connaît", () => {
-    for (const [id, [level, into]] of Object.entries(EVOLUTIONS)) {
-      expect(DEX[into], `${id} évolue vers ${into}, hors Pokédex`).toBeDefined();
-      expect(level).toBeGreaterThan(0);
-      expect(level).toBeLessThanOrEqual(100);
-      expect(into).not.toBe(Number(id));
+    for (const [id, branches] of Object.entries(EVOLUTIONS)) {
+      expect(branches.length, `${id} : liste vide`).toBeGreaterThan(0);
+      const vues = new Set<number>();
+      for (const { into, level, stone, bonheur, moment } of branches) {
+        expect(DEX[into], `${id} évolue vers ${into}, hors Pokédex`).toBeDefined();
+        expect(into, `${id} évolue vers lui-même`).not.toBe(Number(id));
+        expect(vues.has(into), `${id} → ${into} en double`).toBe(false);
+        vues.add(into);
+        // Exactement un déclencheur par branche.
+        const clefs = [level, stone, bonheur].filter((v) => v !== undefined);
+        expect(clefs.length, `${id} → ${into} : ${clefs.length} déclencheurs`).toBe(1);
+        if (level !== undefined) {
+          expect(level).toBeGreaterThan(0);
+          expect(level).toBeLessThanOrEqual(100);
+        }
+        if (moment !== undefined) expect(["jour", "nuit"]).toContain(moment);
+      }
     }
   });
 

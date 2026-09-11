@@ -202,9 +202,15 @@ describe("les chromatiques", () => {
 describe("évolutions", () => {
   it("chaque espèce évolutive pointe vers une espèce connue", () => {
     for (const form of Object.values(SPECIES)) {
-      if (!form.evolvesInto) continue;
-      expect(form.evolvesAt, `${form.name} sans niveau d'évolution`).toBeTypeOf("number");
-      expect(SPECIES[form.evolvesInto], `${form.name} → ${form.evolvesInto}`).toBeDefined();
+      for (const branche of form.evolutions ?? []) {
+        // Une branche tient à un niveau, à une pierre ou au bonheur.
+        const condition = branche.level ?? branche.stone ?? branche.bonheur;
+        expect(condition, `${form.name} : branche sans condition`).toBeDefined();
+        expect(
+          SPECIES[branche.into],
+          `${form.name} → ${branche.into}`,
+        ).toBeDefined();
+      }
     }
   });
 

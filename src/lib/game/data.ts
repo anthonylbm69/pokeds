@@ -4,7 +4,8 @@
  * fournir les sprites, pour qu'un combat n'attende jamais le réseau.
  */
 
-import { DEX, EVOLUTIONS, type DexEntry } from "./dex";
+import { DEX, EVOLUTIONS, type DexEntry, type EvoStep } from "./dex";
+import type { Moment } from "./heure";
 import type { Status } from "./battle";
 
 export type TypeName =
@@ -227,9 +228,11 @@ export type Species = {
   baseExp: number;
   learnset: { level: number; move: MoveId }[];
   entry: string;
-  /** Niveau d'évolution et espèce obtenue, quand l'espèce évolue. */
-  evolvesAt?: number;
-  evolvesInto?: number;
+  /**
+   * Ce en quoi l'espèce peut changer : une branche par forme possible. Évoli
+   * en a sept, la plupart des espèces une seule, et beaucoup aucune.
+   */
+  evolutions?: EvoStep[];
 };
 
 export const SPECIES: Record<number, Species> = {
@@ -244,8 +247,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 10, move: "tranch-herbe" },
     ],
     entry: "Il fait la photosynthèse en prenant le soleil. Quand il est en forme, sa queue s'agite avec vivacité.",
-    evolvesAt: 17,
-    evolvesInto: 496,
+    evolutions: [{ into: 496, level: 17 }],
   },
   498: {
     id: 498, name: "Gruikui", genus: "Pokémon Cochon Feu", types: ["fire"],
@@ -258,8 +260,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 12, move: "morsure" },
     ],
     entry: "Il crache du feu par le groin. Quand il attrape un froid, il rejette une fumée noire au lieu des flammes.",
-    evolvesAt: 17,
-    evolvesInto: 499,
+    evolutions: [{ into: 499, level: 17 }],
   },
   501: {
     id: 501, name: "Moustillon", genus: "Pokémon Loutre", types: ["water"],
@@ -272,8 +273,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 13, move: "morsure" },
     ],
     entry: "Le coquillage de son ventre n'est pas qu'une armure : il s'en sert pour trancher ses adversaires.",
-    evolvesAt: 17,
-    evolvesInto: 502,
+    evolutions: [{ into: 502, level: 17 }],
   },
   504: {
     id: 504, name: "Ratentif", genus: "Pokémon Éclaireur", types: ["normal"],
@@ -286,8 +286,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 9, move: "vive-attaque" },
     ],
     entry: "Très prudent, il se dresse sur ses pattes arrière pour surveiller les environs. Il prévient les siens au moindre danger.",
-    evolvesAt: 20,
-    evolvesInto: 505,
+    evolutions: [{ into: 505, level: 20 }],
   },
   506: {
     id: 506, name: "Ponchiot", genus: "Pokémon Petit Chien", types: ["normal"],
@@ -300,8 +299,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 12, move: "vive-attaque" },
     ],
     entry: "Les poils de son visage lui servent de radar. Très loyal, il obéit au doigt et à l'œil à un Dresseur compétent.",
-    evolvesAt: 16,
-    evolvesInto: 507,
+    evolutions: [{ into: 507, level: 16 }],
   },
   509: {
     id: 509, name: "Chacripan", genus: "Pokémon Sournois", types: ["dark"],
@@ -314,8 +312,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 11, move: "morsure" },
     ],
     entry: "Il vole les affaires des gens pour s'amuser. Poursuivi, il prend un air adorable pour se faire pardonner.",
-    evolvesAt: 20,
-    evolvesInto: 510,
+    evolutions: [{ into: 510, level: 20 }],
   },
   519: {
     id: 519, name: "Poichigeon", genus: "Pokémon Pigeonneau", types: ["normal", "flying"],
@@ -329,8 +326,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 13, move: "picpic" },
     ],
     entry: "Il suit son Dresseur docilement. Comme il oublie souvent les ordres, on lui répète sans cesse la même chose.",
-    evolvesAt: 21,
-    evolvesInto: 520,
+    evolutions: [{ into: 520, level: 21 }],
   },
 
   /* --------------------------------- espèces des forêts, sables et cimes */
@@ -477,8 +473,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 26, move: "lame-feuille" },
     ],
     entry: "Il fuit ses ennemis à toute vitesse en rampant. Sa queue lui sert de fouet quand il doit se défendre.",
-    evolvesAt: 36,
-    evolvesInto: 497,
+    evolutions: [{ into: 497, level: 36 }],
   },
   497: {
     id: 497, name: "Majaspic", genus: "Pokémon Royal", types: ["grass"],
@@ -506,8 +501,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 28, move: "lance-flammes" },
     ],
     entry: "Il se déplace avec agilité malgré sa masse. Les flammes de son menton s'intensifient quand il s'énerve.",
-    evolvesAt: 36,
-    evolvesInto: 500,
+    evolutions: [{ into: 500, level: 36 }],
   },
   500: {
     id: 500, name: "Roitiflam", genus: "Pokémon Cochon Feu", types: ["fire", "fighting"],
@@ -535,8 +529,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 30, move: "vibrobscur" },
     ],
     entry: "Il s'entraîne sans relâche pour maîtriser ses deux coquillages, qu'il manie comme des lames jumelles.",
-    evolvesAt: 36,
-    evolvesInto: 503,
+    evolutions: [{ into: 503, level: 36 }],
   },
   503: {
     id: 503, name: "Clamiral", genus: "Pokémon Type Formel", types: ["water"],
@@ -578,8 +571,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 24, move: "plaquage" },
     ],
     entry: "Prudent et courageux, il suit les ordres de son Dresseur sans jamais rechigner à la tâche.",
-    evolvesAt: 32,
-    evolvesInto: 508,
+    evolutions: [{ into: 508, level: 32 }],
   },
   508: {
     id: 508, name: "Mastouffe", genus: "Pokémon Grand Cœur", types: ["normal"],
@@ -622,8 +614,7 @@ export const SPECIES: Record<number, Species> = {
       { level: 24, move: "coupe-vent" },
     ],
     entry: "Il retrouve toujours son Dresseur, où qu'il se trouve. Il vit en groupe au cœur des forêts.",
-    evolvesAt: 32,
-    evolvesInto: 521,
+    evolutions: [{ into: 521, level: 32 }],
   },
   521: {
     id: 521, name: "Déflaisan", genus: "Pokémon Fier", types: ["normal", "flying"],
@@ -758,7 +749,6 @@ const REBUILT: Record<number, Species> = {};
 function rebuild(id: number, entry: DexEntry): Species {
   const [name, genus, types, base, catchRate, baseExp] = entry;
   const [hp, atk, def, spa, spd, spe] = base;
-  const evolution = EVOLUTIONS[id];
   return {
     id,
     name,
@@ -772,8 +762,7 @@ function rebuild(id: number, entry: DexEntry): Species {
     learnset: [],
     // Seules les espèces détaillées à la main portent une notice de terrain.
     entry: "",
-    evolvesAt: evolution?.[0],
-    evolvesInto: evolution?.[1],
+    evolutions: EVOLUTIONS[id],
   };
 }
 
@@ -783,6 +772,56 @@ export function species(id: number): Species {
   if (written) return written;
   return (REBUILT[id] ??= rebuild(id, DEX[id]));
 }
+
+/* ------------------------------------------------------------ évolutions */
+
+/** Les branches d'une espèce ; la liste vide quand elle ne change plus. */
+export const evolutionsOf = (id: number): EvoStep[] => species(id).evolutions ?? [];
+
+/**
+ * Le bonheur part à mi-chemin, monte en gagnant des niveaux et en passant au
+ * Centre, et retombe quand la créature tombe K.O. Les jeux d'origine le font
+ * aussi monter au fil des pas ; ici il tient aux soins qu'on lui donne.
+ */
+export const BONHEUR_DEPART = 70;
+export const BONHEUR_MAX = 255;
+export const BONHEUR_NIVEAU = 5;
+export const BONHEUR_SOIN = 2;
+export const BONHEUR_KO = 10;
+
+/**
+ * Le crépuscule n'existe pas dans les jeux d'origine : une lignée qui
+ * demande la nuit s'en contente.
+ */
+const nuitTombee = (moment: Moment) => moment === "nuit" || moment === "soir";
+
+/**
+ * La branche qui se déclenche en gagnant un niveau : un niveau atteint, ou un
+ * bonheur suffisant — et parfois au bon moment de la journée. Une branche qui
+ * tient à une pierre n'arrive jamais toute seule.
+ */
+export function evolutionOnLevel(
+  id: number,
+  level: number,
+  bonheur: number,
+  moment: Moment,
+): EvoStep | null {
+  for (const step of evolutionsOf(id)) {
+    if (step.stone) continue;
+    if (step.moment === "nuit" && !nuitTombee(moment)) continue;
+    if (step.moment === "jour" && nuitTombee(moment)) continue;
+    if (step.bonheur !== undefined) {
+      if (bonheur >= step.bonheur) return step;
+      continue;
+    }
+    if (step.level !== undefined && level >= step.level) return step;
+  }
+  return null;
+}
+
+/** La forme qu'une pierre ouvre à cette espèce, s'il y en a une. */
+export const evolutionByStone = (id: number, stone: string): EvoStep | null =>
+  evolutionsOf(id).find((s) => s.stone === stone) ?? null;
 
 /* -------------------------------------------------------------- formules */
 

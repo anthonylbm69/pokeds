@@ -19,12 +19,64 @@ const SORTIE = new URL("../src/lib/game/dex.ts", import.meta.url);
 const STATS = ["hp", "attack", "defense", "special-attack", "special-defense", "speed"];
 
 /**
- * Le jeu ne connaît ni pierre, ni échange, ni bonheur. Ces déclencheurs
- * reçoivent un niveau de convention pour que la lignée reste atteignable en
- * jouant normalement.
+ * Les pierres que le jeu connaît, et leur nom chez PokéAPI. Une pierre
+ * absente de cette table retombe sur un niveau de convention.
+ */
+const PIERRES = {
+  "fire-stone": "pierre-feu",
+  "water-stone": "pierre-eau",
+  "thunder-stone": "pierre-foudre",
+  "leaf-stone": "pierre-plante",
+  "moon-stone": "pierre-lune",
+  "sun-stone": "pierre-soleil",
+  "shiny-stone": "pierre-aube",
+  "dusk-stone": "pierre-nuit",
+  "dawn-stone": "pierre-aurore",
+  "ice-stone": "pierre-glace",
+};
+
+/**
+ * Deux branches d'Évoli tiennent à un rocher planté dans le décor des jeux
+ * d'origine — un lieu que ce jeu n'a pas, et qui retomberait sinon sur un
+ * niveau de convention : Évoli s'évoluerait tout seul avant toute pierre. Les
+ * épisodes récents leur ont donné une pierre ; on reprend la même.
+ */
+const PIERRE_PAR_CIBLE = { 470: "pierre-plante", 471: "pierre-glace" };
+
+/**
+ * Le jeu ne connaît pas l'échange, ni les lignées qui tiennent à un lieu ou à
+ * un objet tenu. Ces déclencheurs reçoivent un niveau de convention pour que
+ * la lignée reste atteignable en jouant normalement.
  */
 const NIVEAU_PAR_DEFAUT = { "use-item": 30, trade: 35, "level-up": 22 };
 const NIVEAU_AUTRE = 32;
+
+/** Le moment de la journée, quand la PokéAPI en exige un. */
+const MOMENT = { day: "jour", night: "nuit" };
+
+/**
+ * Ce qui déclenche une évolution, traduit depuis PokéAPI. Une pierre connue
+ * l'emporte ; sinon le bonheur, qui peut demander un moment de la journée ;
+ * sinon un niveau.
+ */
+function condition(detail, vers) {
+  const trigger = detail.trigger?.name;
+  const moment = MOMENT[detail.time_of_day];
+
+  if (PIERRE_PAR_CIBLE[vers]) return { stone: PIERRE_PAR_CIBLE[vers] };
+  if (trigger === "use-item") {
+    const pierre = PIERRES[detail.item?.name];
+    if (pierre) return { stone: pierre };
+  }
+  if (detail.min_happiness) {
+    return { bonheur: detail.min_happiness, ...(moment ? { moment } : {}) };
+  }
+  return {
+    level:
+      detail.min_level ?? NIVEAU_PAR_DEFAUT[trigger] ?? NIVEAU_AUTRE,
+    ...(moment ? { moment } : {}),
+  };
+}
 
 async function json(url, essais = 4) {
   for (let i = 0; i < essais; i++) {
@@ -122,15 +174,14 @@ function parcourir(noeud) {
   const depuis = numero(noeud.species.url);
   for (const suite of noeud.evolves_to) {
     const vers = numero(suite.species.url);
+    // Plusieurs façons de mener à la même forme : on garde la première.
     const detail = suite.evolution_details[0];
-    // Une espèce à plusieurs branches — Évoli — ne garde que la première.
-    if (detail && depuis <= MAX && vers <= MAX && !evolutions[depuis]) {
-      evolutions[depuis] = [
-        detail.min_level ??
-          NIVEAU_PAR_DEFAUT[detail.trigger?.name] ??
-          NIVEAU_AUTRE,
-        vers,
-      ];
+    if (detail && depuis <= MAX && vers <= MAX) {
+      const branches = (evolutions[depuis] ??= []);
+      // Une espèce qui bifurque — Évoli — garde toutes ses branches.
+      if (!branches.some((b) => b.into === vers)) {
+        branches.push({ into: vers, ...condition(detail, vers) });
+      }
     }
     parcourir(suite);
   }
@@ -154,7 +205,18 @@ const blocTalents = [
   "};",
 ].join("\n");
 
-const ligneEvolution = ([id, [niveau, vers]]) => `  ${id}: [${niveau}, ${vers}],`;
+/** Une branche s'écrit dans l'ordre : cible, puis sa condition. */
+const ecrireBranche = (b) => {
+  const parts = [`into: ${b.into}`];
+  if (b.level !== undefined) parts.push(`level: ${b.level}`);
+  if (b.stone) parts.push(`stone: ${JSON.stringify(b.stone)}`);
+  if (b.bonheur !== undefined) parts.push(`bonheur: ${b.bonheur}`);
+  if (b.moment) parts.push(`moment: ${JSON.stringify(b.moment)}`);
+  return `{ ${parts.join(", ")} }`;
+};
+
+const ligneEvolution = ([id, branches]) =>
+  `  ${id}: [${branches.map(ecrireBranche).join(", ")}],`;
 
 const fichier = `/**
  * Les ${MAX} premières espèces, relevées une fois pour toutes chez PokéAPI puis
@@ -195,12 +257,27 @@ export const WILD_POOL: number[] = Object.entries(DEX)
 
 ${blocTalents}
 
+/** Ce qui fait passer une espèce à la suivante. */
+export type EvoStep = {
+  /** Espèce obtenue. */
+  into: number;
+  /** Niveau à atteindre, quand la montée de niveau suffit. */
+  level?: number;
+  /** Pierre à employer — elle remplace le niveau. */
+  stone?: string;
+  /** Bonheur requis : la créature change en gagnant un niveau. */
+  bonheur?: number;
+  /** Moment de la journée exigé, pour les lignées qui bifurquent. */
+  moment?: "jour" | "nuit";
+};
+
 /**
- * Évolutions par montée de niveau. Le jeu ne connaît ni pierre, ni échange,
- * ni bonheur : ces déclencheurs reçoivent un niveau de convention pour que la
- * lignée reste atteignable en jouant normalement.
+ * Les évolutions, une liste de branches par espèce : Évoli en a cinq. Le jeu
+ * ignore l'échange, les lieux et les objets tenus — ces déclencheurs
+ * reçoivent un niveau de convention pour que la lignée reste atteignable en
+ * jouant normalement.
  */
-export const EVOLUTIONS: Record<number, [level: number, into: number]> = {
+export const EVOLUTIONS: Record<number, EvoStep[]> = {
 ${Object.entries(evolutions)
   .sort((a, b) => Number(a[0]) - Number(b[0]))
   .map(ligneEvolution)
@@ -209,7 +286,11 @@ ${Object.entries(evolutions)
 `;
 
 writeFileSync(SORTIE, fichier);
+const branches = Object.values(evolutions).flat();
 console.log(
   `écrit : ${MAX} espèces, dont ${fiches.filter((f) => f.rare).length} écartées ` +
-    `des herbes, et ${Object.keys(evolutions).length} évolutions`,
+    `des herbes, et ${branches.length} branches d'évolution sur ` +
+    `${Object.keys(evolutions).length} espèces — ` +
+    `${branches.filter((b) => b.stone).length} à la pierre, ` +
+    `${branches.filter((b) => b.bonheur).length} au bonheur`,
 );

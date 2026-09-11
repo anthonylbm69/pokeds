@@ -41,8 +41,8 @@ const pension = (mons: Mon[], over: Partial<Daycare> = {}): Daycare => ({
 describe("la forme de base", () => {
   it("remonte une chaîne d'évolution jusqu'à son départ", () => {
     // Une chaîne réelle du dex : on prend une espèce qui a un parent connu.
-    const [depuis, [, vers]] = Object.entries(EVOLUTIONS)[0];
-    expect(baseForm(vers)).toBe(baseForm(Number(depuis)));
+    const [depuis, branches] = Object.entries(EVOLUTIONS)[0];
+    expect(baseForm(branches[0].into)).toBe(baseForm(Number(depuis)));
   });
 
   it("laisse tranquille une espèce sans parent", () => {
@@ -95,8 +95,8 @@ describe("l'œuf préparé", () => {
   });
 
   it("prend l'espèce du premier parent, ramenée à sa forme de base", () => {
-    const [depuis, [, evolue]] = Object.entries(EVOLUTIONS)[0];
-    const oeuf = makeEgg([parent(evolue, 40), parent(495)])!;
+    const [depuis, branches] = Object.entries(EVOLUTIONS)[0];
+    const oeuf = makeEgg([parent(branches[0].into, 40), parent(495)])!;
     expect(oeuf.id).toBe(baseForm(Number(depuis)));
   });
 

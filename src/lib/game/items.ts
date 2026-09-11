@@ -23,9 +23,51 @@ export type ItemId =
   | "lunettes"
   | "huile"
   | "elixir"
+  | StoneId
   | `ct-${MoveId}`;
 
-export type ItemKind = "ball" | "soin" | "rappel" | "statut" | "ct" | "tenu" | "pp";
+/**
+ * Les pierres d'évolution. La liste vient du Pokédex lui-même : chaque
+ * branche qui tient à une pierre en nomme une, et toutes se vendent.
+ */
+export const STONES = [
+  "pierre-feu",
+  "pierre-eau",
+  "pierre-foudre",
+  "pierre-plante",
+  "pierre-glace",
+  "pierre-lune",
+  "pierre-soleil",
+  "pierre-aube",
+  "pierre-nuit",
+  "pierre-aurore",
+] as const;
+
+export type StoneId = (typeof STONES)[number];
+
+/** Le nom que porte chaque pierre au rayon. */
+const STONE_FR: Record<StoneId, string> = {
+  "pierre-feu": "Pierre Feu",
+  "pierre-eau": "Pierre Eau",
+  "pierre-foudre": "Pierre Foudre",
+  "pierre-plante": "Pierre Plante",
+  "pierre-glace": "Pierre Glace",
+  "pierre-lune": "Pierre Lune",
+  "pierre-soleil": "Pierre Soleil",
+  "pierre-aube": "Pierre Aube",
+  "pierre-nuit": "Pierre Nuit",
+  "pierre-aurore": "Pierre Aurore",
+};
+
+export type ItemKind =
+  | "ball"
+  | "soin"
+  | "rappel"
+  | "statut"
+  | "ct"
+  | "tenu"
+  | "pp"
+  | "pierre";
 
 export type Item = {
   name: string;
@@ -105,6 +147,16 @@ export const ctMove = (id: ItemId): MoveId | null =>
 const ctPrice = (move: MoveId) =>
   Math.max(1500, Math.round((MOVES[move].power || 60) * 40));
 
+/** Une pierre coûte cher : elle saute des niveaux entiers d'élevage. */
+const STONE_PRICE = 2100;
+
+const STONE_ITEMS = Object.fromEntries(
+  STONES.map((stone) => [
+    stone,
+    { name: STONE_FR[stone], price: STONE_PRICE, kind: "pierre" as const },
+  ]),
+) as Record<ItemId, Item>;
+
 const CT_ITEMS = Object.fromEntries(
   CT_MOVES.map((move) => [
     ctId(move),
@@ -119,6 +171,7 @@ const CT_ITEMS = Object.fromEntries(
 
 export const ITEMS: Record<ItemId, Item> = {
   ...CT_ITEMS,
+  ...STONE_ITEMS,
   ball: { name: "Poké Ball", price: 200, kind: "ball", bonus: 1 },
   superball: { name: "Super Ball", price: 600, kind: "ball", bonus: 1.5 },
   hyperball: { name: "Hyper Ball", price: 1200, kind: "ball", bonus: 2 },
@@ -188,6 +241,7 @@ export const ITEM_ORDER: ItemId[] = [
   "lunettes",
   "huile",
   "elixir",
+  ...STONES,
   // Les Capsules ferment la marche : elles sont nombreuses et rares.
   ...CT_MOVES.map(ctId),
 ];
@@ -203,6 +257,7 @@ export const emptyBag = (): Bag => ({
   masterball: 0,
   restes: 0, ceinture: 0, "baie-oran": 0, "roche-royale": 0, lunettes: 0,
   huile: 0, elixir: 0,
+  ...Object.fromEntries(STONES.map((s) => [s, 0])),
   ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
 } as Bag);
 
@@ -314,6 +369,10 @@ export function refillPP(item: ItemId, mon: Mon, move = 0): Mon["moves"] {
       : m,
   );
 }
+
+/** Une pierre ne se pose que sur une espèce qu'elle fait changer. */
+export const isStone = (item: ItemId): item is StoneId =>
+  ITEMS[item].kind === "pierre";
 
 /** Une CT s'enseigne hors combat, et seulement là. */
 export const isCT = (item: ItemId) => ITEMS[item].kind === "ct";

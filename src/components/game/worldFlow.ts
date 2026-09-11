@@ -16,6 +16,7 @@ import {
   effectOn,
   isHeld,
   isPP,
+  isStone,
   ppEffectOn,
   type ItemId,
 } from "@/lib/game/items";
@@ -33,6 +34,7 @@ import {
   hallDate,
   hallTime,
   relearnable,
+  stoneEffectOn,
   hasFlag,
   towerFoe,
   towerReward,
@@ -278,6 +280,29 @@ export function worldScreen(
             ],
           };
         }
+        // Une pierre ne vaut que pour qui elle fait changer : on le dit sur
+        // chaque ligne plutôt que de laisser chercher.
+        if (isStone(item)) {
+          return {
+            title: `${ITEMS[item].name} — sur qui ?`,
+            hint: "▲ ▼ pour choisir · A pour employer · B pour revenir",
+            layout: "list",
+            list: [
+              ...game.party.map((mon, i) => {
+                const { into } = stoneEffectOn(item, mon);
+                return {
+                  id: `mon:${i}`,
+                  ...monLine(mon),
+                  sub: into ? `deviendrait ${species(into).name}` : "aucun effet",
+                  disabled: into === null,
+                  tone: "party" as const,
+                };
+              }),
+              back,
+            ],
+          };
+        }
+
         // Un objet tenu se confie : on montre ce que chacun porte déjà.
         if (isHeld(item)) {
           return {

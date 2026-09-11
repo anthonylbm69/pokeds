@@ -49,8 +49,8 @@ export const DAYCARE_MAX = 2;
  */
 export function baseForm(id: number): number {
   const parents = new Map<number, number>();
-  for (const [depuis, [, vers]] of Object.entries(EVOLUTIONS)) {
-    parents.set(vers, Number(depuis));
+  for (const [depuis, branches] of Object.entries(EVOLUTIONS)) {
+    for (const branche of branches) parents.set(branche.into, Number(depuis));
   }
   let courant = id;
   // Une chaîne est courte ; la borne évite une boucle si les données bouclent.

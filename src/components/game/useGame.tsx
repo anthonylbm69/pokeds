@@ -14,6 +14,7 @@ import {
   ctMove,
   isHeld,
   isPP,
+  isStone,
   type ItemId,
 } from "@/lib/game/items";
 import {
@@ -64,6 +65,7 @@ import {
   saveGame,
   applyItem,
   applyPP,
+  applyStone,
   enterHallOfFame,
   relearnMove,
   giveHeld,
@@ -1444,6 +1446,20 @@ export function useGame({
           setGame(appris.state);
           setCursor(0);
           setPhase({ kind: "sac", on: "objets", message: appris.message });
+          return;
+        }
+
+        if (isStone(item)) {
+          const rang = Number(choice.id.split(":")[1]);
+          const { state: apres, messages } = applyStone(game, item, rang);
+          setGame(apres);
+          setCursor(0);
+          // Une évolution mérite son défilement de texte, pas une ligne de menu.
+          if (apres === game) {
+            setPhase({ kind: "sac", on: "objets", message: messages[0] });
+          } else {
+            setPhase({ kind: "text", lines: messages, i: 0, then: null });
+          }
           return;
         }
 
