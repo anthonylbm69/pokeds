@@ -8,7 +8,7 @@ import {
   type BattleUi,
 } from "./battleFlow";
 import { createMon, maxHp, startTrainer, startWild, type Mon } from "@/lib/game/battle";
-import { emptyBag, type Bag } from "@/lib/game/items";
+import { POCKET_FR, emptyBag, type Bag } from "@/lib/game/items";
 import type { Choice } from "./TouchPanel";
 
 const sac = (over: Partial<Bag> = {}): Bag => ({ ...emptyBag(), ...over });
@@ -58,12 +58,31 @@ describe("les écrans de combat", () => {
     expect(fuite(ui({ state }))).toBe(true);
   });
 
-  it("ne montrent au sac que ce que l'on porte", () => {
-    const liste = ids(ui({ view: "bag" }));
-    expect(liste).toContain("ball");
-    expect(liste).toContain("potion");
-    expect(liste).not.toContain("superpotion");
-    expect(liste).toContain("back");
+  it("ne montrent au sac que ce que l'on porte, poche par poche", () => {
+    const soins = ids(ui({ view: "bag", pocket: "soins" }));
+    expect(soins).toContain("potion");
+    expect(soins).not.toContain("superpotion");
+    expect(soins, "les Balls ont leur propre poche").not.toContain("ball");
+    expect(soins).toContain("back");
+
+    const balls = ids(ui({ view: "bag", pocket: "balls" }));
+    expect(balls).toContain("ball");
+    expect(balls).toContain("hyperball");
+    expect(balls).not.toContain("potion");
+  });
+
+  it("ouvrent le sac sur la première poche garnie", () => {
+    // Sans Balls ni soins, le sac doit s'ouvrir sur les Capsules.
+    const state = startWild([solide(495)], solide(504, 5), sac({ "ct-plaquage": 1 }));
+    const ecran = battleScreen(ui({ state, view: "bag" }), monLine);
+    expect(ecran.title).toContain(POCKET_FR.ct);
+    expect(ecran.list.map((c) => c.id)).toContain("ct-plaquage");
+  });
+
+  it("annoncent une poche vide plutôt que de ne rien montrer", () => {
+    const state = startWild([solide(495)], solide(504, 5), sac());
+    const liste = ids(ui({ state, view: "bag", pocket: "pierres" }));
+    expect(liste).toContain("vide");
   });
 
   it("grisent les Balls face à un dresseur, en disant pourquoi", () => {
@@ -73,11 +92,12 @@ describe("les écrans de combat", () => {
       { name: "Steven", title: "Dresseur", reward: 100 },
       sac({ ball: 2, potion: 1 }),
     );
-    const liste = battleScreen(ui({ state, view: "bag" }), monLine).list;
+    const liste = battleScreen(ui({ state, view: "bag", pocket: "balls" }), monLine).list;
     const ball = liste.find((c) => c.id === "ball");
     expect(ball?.disabled).toBe(true);
     expect(ball?.sub).toContain("Pokémon d'un autre");
-    expect(liste.find((c) => c.id === "potion")?.disabled).toBe(false);
+    const soins = battleScreen(ui({ state, view: "bag", pocket: "soins" }), monLine).list;
+    expect(soins.find((c) => c.id === "potion")?.disabled).toBe(false);
   });
 
   it("grisent une attaque sans PP", () => {

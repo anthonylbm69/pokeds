@@ -21,10 +21,15 @@ import {
 import {
   ITEMS,
   ITEM_ORDER,
+  POCKETS,
+  POCKET_FR,
   countOf,
   effectOn,
+  firstPocket,
   needsTarget,
+  pocketItems,
   type ItemId,
+  type Pocket,
 } from "@/lib/game/items";
 import type { Choice } from "./TouchPanel";
 
@@ -39,6 +44,8 @@ export type BattleUi = {
   showTrainer: boolean;
   /** Objet choisi au sac, en attente de sa cible. */
   item?: ItemId;
+  /** Poche ouverte au sac : L et R passent de l'une à l'autre. */
+  pocket?: Pocket;
   /** `npc` n'est renseigné que pour un Pokémon posté sur la carte. */
   origin:
     | { kind: "sauvage"; npc?: string }
@@ -133,12 +140,17 @@ export function battleScreen(ui: BattleUi, monLine: MonLine): Screen {
   }
 
   if (ui.view === "bag") {
+    const poche = ui.pocket ?? firstPocket(s.bag);
+    const tenus = pocketItems(s.bag, poche);
+    const garnies = POCKETS.filter((p) => pocketItems(s.bag, p).length);
     return {
-      title: "Sac",
-      hint: "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
+      title: `Sac — ${POCKET_FR[poche]}`,
+      hint: garnies.length > 1
+        ? "◀ ▶ ou L R pour changer de poche · A pour utiliser · B pour revenir"
+        : "▲ ▼ pour choisir · A pour utiliser · B pour revenir",
       layout: "list",
       list: [
-        ...ITEM_ORDER.filter((id) => countOf(s.bag, id) > 0).map((id) => ({
+        ...tenus.map((id) => ({
           id,
           label: ITEMS[id].name,
           sub:
@@ -148,6 +160,9 @@ export function battleScreen(ui: BattleUi, monLine: MonLine): Screen {
           disabled: ITEMS[id].kind === "ball" && s.kind === "dresseur",
           tone: "bag" as const,
         })),
+        ...(tenus.length
+          ? []
+          : [{ id: "vide", label: "POCHE VIDE", disabled: true, tone: "back" as const }]),
         back,
       ],
     };

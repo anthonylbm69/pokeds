@@ -3,6 +3,13 @@ import { createMon, maxHp, startWild, takeItem, throwBall } from "./battle";
 import {
   ITEMS,
   ITEM_ORDER,
+  POCKETS,
+  POCKET_FR,
+  ctId,
+  firstPocket,
+  nextPocket,
+  pocketItems,
+  pocketOf,
   add,
   countOf,
   effectOn,
@@ -272,5 +279,102 @@ describe("l'Huile et l'Élixir", () => {
     const mon = usagé([0]);
     refillPP("elixir", mon, 0);
     expect(mon.moves[0].pp).toBe(0);
+  });
+});
+
+describe("les poches du sac", () => {
+  it("rangent chaque objet du catalogue, et une seule fois", () => {
+    for (const id of ITEM_ORDER) {
+      const poche = pocketOf(id);
+      expect(POCKETS, `${id} dans « ${poche} », poche inconnue`).toContain(poche);
+    }
+    // Chaque poche sert à quelque chose : aucune ne reste vide par principe.
+    for (const poche of POCKETS) {
+      const dedans = ITEM_ORDER.filter((id) => pocketOf(id) === poche);
+      expect(dedans.length, `la poche ${poche} ne contient rien`).toBeGreaterThan(0);
+    }
+  });
+
+  it("répartissent le sac sans rien perdre ni doubler", () => {
+    const repartis = POCKETS.flatMap((p) => ITEM_ORDER.filter((id) => pocketOf(id) === p));
+    expect(repartis.length).toBe(ITEM_ORDER.length);
+    expect(new Set(repartis).size).toBe(ITEM_ORDER.length);
+  });
+
+  it("ne montrent que ce que l'on porte vraiment", () => {
+    const bag = sac({ potion: 2, ball: 1, "pierre-eau": 1 });
+    expect(pocketItems(bag, "soins")).toEqual(["potion"]);
+    expect(pocketItems(bag, "balls")).toEqual(["ball"]);
+    expect(pocketItems(bag, "pierres")).toEqual(["pierre-eau"]);
+    expect(pocketItems(bag, "ct")).toEqual([]);
+  });
+
+  it("gardent l'ordre du rayon à l'intérieur d'une poche", () => {
+    const bag = sac({ hyperpotion: 1, potion: 1, superpotion: 1 });
+    const dedans = pocketItems(bag, "soins");
+    const attendu = ITEM_ORDER.filter((id) => dedans.includes(id));
+    expect(dedans).toEqual(attendu);
+  });
+
+  it("ouvrent le sac sur la première poche garnie", () => {
+    expect(firstPocket(sac({ potion: 1, ball: 1 }))).toBe("soins");
+    expect(firstPocket(sac({ ball: 1 }))).toBe("balls");
+    expect(firstPocket(sac({ "pierre-feu": 1 }))).toBe("pierres");
+  });
+
+  it("ouvrent sur les soins quand le sac est vide", () => {
+    expect(firstPocket(sac())).toBe("soins");
+  });
+
+  it("sautent les poches vides en tournant", () => {
+    // Deux poches garnies, très éloignées dans l'ordre : on passe de l'une
+    // à l'autre sans traverser trois écrans vides.
+    const bag = sac({ potion: 1, "ct-plaquage": 1 });
+    expect(nextPocket(bag, "soins", 1)).toBe("ct");
+    expect(nextPocket(bag, "ct", 1)).toBe("soins");
+    expect(nextPocket(bag, "soins", -1)).toBe("ct");
+  });
+
+  it("tournent dans les deux sens", () => {
+    const bag = sac({ potion: 1, ball: 1, "pierre-eau": 1 });
+    expect(nextPocket(bag, "soins", 1)).toBe("balls");
+    expect(nextPocket(bag, "balls", 1)).toBe("pierres");
+    expect(nextPocket(bag, "pierres", 1)).toBe("soins");
+    expect(nextPocket(bag, "soins", -1)).toBe("pierres");
+    expect(nextPocket(bag, "pierres", -1)).toBe("balls");
+  });
+
+  it("restent sur place quand une seule poche est garnie", () => {
+    const bag = sac({ potion: 1 });
+    expect(nextPocket(bag, "soins", 1)).toBe("soins");
+    expect(nextPocket(bag, "soins", -1)).toBe("soins");
+  });
+
+  it("restent sur place quand le sac est vide", () => {
+    expect(nextPocket(sac(), "objets", 1)).toBe("objets");
+  });
+
+  it("donnent un nom à chaque poche", () => {
+    for (const poche of POCKETS) {
+      expect(POCKET_FR[poche]?.length, `${poche}`).toBeGreaterThan(0);
+    }
+    expect(new Set(Object.values(POCKET_FR)).size).toBe(POCKETS.length);
+  });
+
+  it("mettent les soins d'abord : c'est ce qu'on cherche en combat", () => {
+    expect(POCKETS[0]).toBe("soins");
+    expect(pocketOf("potion")).toBe("soins");
+    expect(pocketOf("rappel")).toBe("soins");
+    expect(pocketOf("totalsoin")).toBe("soins");
+    expect(pocketOf("huile")).toBe("soins");
+    expect(pocketOf("proteine")).toBe("soins");
+  });
+
+  it("séparent ce qui se lance, se confie et s'enseigne", () => {
+    expect(pocketOf("hyperball")).toBe("balls");
+    expect(pocketOf("restes")).toBe("objets");
+    expect(pocketOf("canne")).toBe("objets");
+    expect(pocketOf("pierre-lune")).toBe("pierres");
+    expect(pocketOf(ctId("plaquage"))).toBe("ct");
   });
 });

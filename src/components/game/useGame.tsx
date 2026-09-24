@@ -20,6 +20,8 @@ import {
   isRod,
   isStone,
   isVitamine,
+  firstPocket,
+  nextPocket,
   type ItemId,
 } from "@/lib/game/items";
 import {
@@ -1868,6 +1870,21 @@ export function useGame({
 
         case "sac":
         case "pc":
+          // Au sac, quatre touches changent de poche : celles de la liste
+          // d'objets seulement, pas celles d'un écran de cible.
+          if (
+            phase.kind === "sac" &&
+            phase.on === "objets" &&
+            (button === "l" || button === "r" || button === "left" || button === "right")
+          ) {
+            const sens = button === "l" || button === "left" ? -1 : 1;
+            setCursor(0);
+            setPhase({
+              ...phase,
+              pocket: nextPocket(game.bag, phase.pocket ?? firstPocket(game.bag), sens),
+            });
+            return;
+          }
           if (button === "up") moveCursor(0, -1);
           else if (button === "down") moveCursor(0, 1);
           else if (button === "a") pick(cursor);
@@ -1884,6 +1901,27 @@ export function useGame({
           const ui = phase.ui;
           if (ui.view === "message") {
             if (button === "a" || button === "b" || button === "start") advanceBattle(ui);
+            return;
+          }
+          // Le sac du combat se range en poches comme celui du monde ; la
+          // liste est verticale, donc gauche et droite sont libres.
+          if (
+            ui.view === "bag" &&
+            (button === "l" || button === "r" || button === "left" || button === "right")
+          ) {
+            const sens = button === "l" || button === "left" ? -1 : 1;
+            setCursor(0);
+            setPhase({
+              kind: "battle",
+              ui: {
+                ...ui,
+                pocket: nextPocket(
+                  ui.state.bag,
+                  ui.pocket ?? firstPocket(ui.state.bag),
+                  sens,
+                ),
+              },
+            });
             return;
           }
           if (button === "up") moveCursor(0, -1);
@@ -1925,7 +1963,7 @@ export function useGame({
           return;
       }
     },
-    [active, phase, cursor, game.party.length, game.hall.length, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
+    [active, phase, cursor, game.bag, game.party.length, game.hall.length, pick, moveCursor, advanceBattle, interact, save, toggleBike, trackCheat, grantDreamTeam, onOpenDex, onExit, resolveThen],
   );
 
   /* ---------------------------------------------------------- musique */

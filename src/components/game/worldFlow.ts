@@ -20,7 +20,6 @@ import {
 import { STATUS_FR, maxHp, statOf, type Mon } from "@/lib/game/battle";
 import {
   ITEMS,
-  ITEM_ORDER,
   SHOP_STOCK,
   countOf,
   ctMove,
@@ -31,7 +30,12 @@ import {
   isStone,
   isVitamine,
   VITAMINES,
+  POCKETS,
+  POCKET_FR,
+  firstPocket,
+  pocketItems,
   ppEffectOn,
+  type Pocket,
   type ItemId,
 } from "@/lib/game/items";
 import { abilityName, abilityWorks, natureName } from "@/lib/game/traits";
@@ -93,6 +97,8 @@ export type Phase =
   | {
       kind: "sac";
       on: "objets" | "cible" | "oubli";
+      /** Poche ouverte : L et R passent de l'une à l'autre. */
+      pocket?: Pocket;
       item?: ItemId;
       /** Pokémon choisi, quand une Capsule attend qu'on lui fasse de la place. */
       cible?: number;
@@ -417,10 +423,14 @@ export function worldScreen(
           ],
         };
       }
-      const tenus = ITEM_ORDER.filter((id) => countOf(game.bag, id) > 0);
+      const poche = phase.pocket ?? firstPocket(game.bag);
+      const tenus = pocketItems(game.bag, poche);
+      const garnies = POCKETS.filter((p) => pocketItems(game.bag, p).length);
       return {
-        title: "Sac",
-        hint: "▲ ▼ pour choisir · A pour utiliser · B pour fermer",
+        title: `Sac — ${POCKET_FR[poche]}`,
+        hint: garnies.length > 1
+          ? "◀ ▶ ou L R pour changer de poche · A pour utiliser · B pour fermer"
+          : "▲ ▼ pour choisir · A pour utiliser · B pour fermer",
         layout: "list",
         list: [
           ...tenus.map((id) => ({
@@ -433,7 +443,9 @@ export function worldScreen(
             disabled: ITEMS[id].kind === "ball" || !game.party.length,
             tone: "bag" as const,
           })),
-          ...(tenus.length ? [] : [{ id: "vide", label: "SAC VIDE", disabled: true, tone: "back" as const }]),
+          ...(tenus.length
+            ? []
+            : [{ id: "vide", label: "POCHE VIDE", disabled: true, tone: "back" as const }]),
           { id: "leave", label: "FERMER", tone: "back" as const },
         ],
       };

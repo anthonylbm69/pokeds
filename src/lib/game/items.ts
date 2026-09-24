@@ -454,3 +454,63 @@ export const isHeld = (item: ItemId) => ITEMS[item].kind === "tenu";
 /** Ce que l'objet porté par ce Pokémon sait faire — rien s'il n'en porte pas. */
 export const holdRules = (held: ItemId | null | undefined): Hold =>
   (held && ITEMS[held]?.hold) || {};
+
+/* ------------------------------------------------------------- les poches */
+
+/**
+ * Le sac s'est rempli : capsules, pierres, vitamines et cannes s'ajoutent aux
+ * soins et aux Balls. Cinquante-neuf lignes d'affilée ne se lisent plus — en
+ * plein combat encore moins — alors le sac se range en poches, et L et R
+ * passent de l'une à l'autre.
+ */
+export const POCKETS = ["soins", "balls", "objets", "pierres", "ct"] as const;
+
+export type Pocket = (typeof POCKETS)[number];
+
+export const POCKET_FR: Record<Pocket, string> = {
+  soins: "Soins",
+  balls: "Balls",
+  objets: "Objets",
+  pierres: "Pierres",
+  ct: "Capsules",
+};
+
+/** Où va chaque genre d'objet. */
+const POCKET_OF: Record<ItemKind, Pocket> = {
+  soin: "soins",
+  rappel: "soins",
+  statut: "soins",
+  pp: "soins",
+  vitamine: "soins",
+  ball: "balls",
+  tenu: "objets",
+  canne: "objets",
+  pierre: "pierres",
+  ct: "ct",
+};
+
+export const pocketOf = (item: ItemId): Pocket => POCKET_OF[ITEMS[item].kind];
+
+/** Ce que le sac tient dans cette poche, dans l'ordre du rayon. */
+export const pocketItems = (bag: Bag, pocket: Pocket): ItemId[] =>
+  ITEM_ORDER.filter((id) => pocketOf(id) === pocket && countOf(bag, id) > 0);
+
+/**
+ * La poche suivante, en tournant. On saute celles qui sont vides : faire
+ * défiler quatre poches sans rien dedans n'aide personne. Si tout est vide,
+ * on reste où l'on est.
+ */
+export function nextPocket(bag: Bag, from: Pocket, step: number): Pocket {
+  const depart = POCKETS.indexOf(from);
+  const n = POCKETS.length;
+  for (let i = 1; i <= n; i++) {
+    // Un reste toujours positif : `%` seul rendrait un indice négatif.
+    const suivante = POCKETS[(((depart + step * i) % n) + n) % n];
+    if (pocketItems(bag, suivante).length) return suivante;
+  }
+  return from;
+}
+
+/** La première poche qui contient quelque chose — celle que le sac ouvre. */
+export const firstPocket = (bag: Bag): Pocket =>
+  POCKETS.find((p) => pocketItems(bag, p).length) ?? "soins";
