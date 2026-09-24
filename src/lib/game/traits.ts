@@ -8,7 +8,7 @@
  */
 
 import { ABILITY_FR, DEX } from "./dex";
-import type { StatKey, TypeName } from "./data";
+import type { StatKey, TypeName, Weather } from "./data";
 import type { Status } from "./battle";
 
 /* -------------------------------------------------------------- natures */
@@ -82,7 +82,33 @@ export type Ability = {
   sturdy?: true;
   /** Multiplie l'Attaque quand le Pokémon souffre d'une altération. */
   guts?: true;
+  /** Encaisse moitié moins de ces types. */
+  halve?: TypeName[];
+  /** Ne subit jamais de coup critique. */
+  noCrit?: true;
+  /** Les attaques faibles frappent une fois et demie plus fort. */
+  technician?: true;
+  /** Attaque doublée : une force hors norme dans un petit corps. */
+  hugePower?: true;
+  /** Rend une part des PV maximum à qui frappe au corps à corps. */
+  barbs?: number;
+  /** Installe une météo en entrant en scène. */
+  sets?: Weather;
+  /** Double la Vitesse sous ce temps-là. */
+  rush?: Weather;
+  /** Ne subit pas le contrecoup de ses propres attaques. */
+  noRecoil?: true;
+  /** Ne recule jamais : garde toujours son tour. */
+  noFlinch?: true;
+  /** Statistiques qu'un adversaire ne peut pas lui faire baisser. */
+  keeps?: (Boostable | "acc")[];
+  /** Chance, à chaque tour, de se défaire seul de son altération. */
+  shed?: number;
 };
+
+/** Sous quel seuil de puissance « Technicien » s'applique. */
+export const TECHNICIAN_POWER = 60;
+export const TECHNICIAN_BOOST = 1.5;
 
 export const ABILITIES: Record<string, Ability> = {
   overgrow: { pinch: "grass" },
@@ -99,6 +125,43 @@ export const ABILITIES: Record<string, Ability> = {
   intimidate: { intimidate: true },
   sturdy: { sturdy: true },
   guts: { guts: true },
+
+  // Absorber un type, c'est mieux que d'y résister : rien ne passe.
+  "flash-fire": { immune: "fire" },
+  "water-absorb": { immune: "water" },
+  "volt-absorb": { immune: "electric" },
+  "motor-drive": { immune: "electric" },
+  "lightning-rod": { immune: "electric" },
+
+  // Toucher un dos hérissé se paie comptant.
+  "rough-skin": { barbs: 1 / 8 },
+  "iron-barbs": { barbs: 1 / 8 },
+  "effect-spore": { contact: { status: "poison", chance: 0.3 } },
+
+  // Encaisser mieux : une épaisseur, une carapace, une peau à l'épreuve.
+  "thick-fat": { halve: ["fire", "ice"] },
+  "shell-armor": { noCrit: true },
+  "battle-armor": { noCrit: true },
+
+  // Frapper mieux : la technique, ou la force pure.
+  technician: { technician: true },
+  "pure-power": { hugePower: true },
+
+  // Le ciel, enfin mis à contribution : trois talents l'installent, trois
+  // autres en profitent pour courir deux fois plus vite.
+  drought: { sets: "soleil" },
+  drizzle: { sets: "pluie" },
+  "sand-stream": { sets: "sable" },
+  chlorophyll: { rush: "soleil" },
+  "swift-swim": { rush: "pluie" },
+  "sand-rush": { rush: "sable" },
+
+  // Ne pas subir : le contrecoup, la peur, et les regards de travers.
+  "rock-head": { noRecoil: true },
+  "inner-focus": { noFlinch: true },
+  "keen-eye": { keeps: ["acc"] },
+  "hyper-cutter": { keeps: ["atk"] },
+  "shed-skin": { shed: 1 / 3 },
 
   immunity: { blocks: ["poison"] },
   "water-veil": { blocks: ["brulure"] },

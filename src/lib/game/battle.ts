@@ -38,7 +38,14 @@ import {
   type Bag,
   type ItemId,
 } from "./items";
-import { NATURES, PINCH, abilityRules, natureMult } from "./traits";
+import {
+  NATURES,
+  PINCH,
+  TECHNICIAN_BOOST,
+  TECHNICIAN_POWER,
+  abilityRules,
+  natureMult,
+} from "./traits";
 
 export type Mon = {
   uid: string;
@@ -261,7 +268,16 @@ export function onEnter(
   cible: Mon,
   mine: boolean,
   messages: string[],
+  state?: BattleState,
 ): void {
+  // Sécheresse, Crachin, Sable Volant : le temps change avec l'entrant, et
+  // tient tant qu'il reste — comme le ciel d'un lieu.
+  const ciel = abilityRules(entrant.id).sets;
+  if (ciel && state && state.weather?.kind !== ciel) {
+    state.weather = { kind: ciel, turns: 0, dehors: true };
+    messages.push(WEATHER_FR[ciel]);
+  }
+
   if (!abilityRules(entrant.id).intimidate) return;
   if (cibleStages.atk <= -6) return;
   cibleStages.atk -= 1;
@@ -445,14 +461,28 @@ const clearConfusion = (mons: Mon[]) => {
   for (const m of mons) m.confusion = 0;
 };
 
+/**
+ * Le temps qui règne au premier tour : celui du lieu, ou celui qu'un talent
+ * amène avec lui. Sécheresse et consorts doivent valoir dès l'ouverture, pas
+ * seulement quand on change de Pokémon en cours de route.
+ */
+function cielDouverture(entrants: Mon[], lieu?: Weather): Weather | undefined {
+  for (const mon of entrants) {
+    const amene = abilityRules(mon.id).sets;
+    if (amene) return amene;
+  }
+  return lieu;
+}
+
 export function startWild(
   party: Mon[],
   foe: Mon,
   bag: Bag,
-  ciel?: Weather,
+  lieu?: Weather,
 ): BattleState {
   clearConfusion(party);
   foe.confusion = 0;
+  const ciel = cielDouverture([party.find((m) => !isKo(m)) ?? party[0], foe], lieu);
   return {
     ...(ciel ? { weather: { kind: ciel, turns: 0, dehors: true as const } } : {}),
     kind: "sauvage",
@@ -476,9 +506,13 @@ export function startTrainer(
   team: Mon[],
   trainer: { name: string; title: string; reward: number },
   bag: Bag,
-  ciel?: Weather,
+  lieu?: Weather,
 ): BattleState {
   clearConfusion([...party, ...team]);
+  const ciel = cielDouverture(
+    [party.find((m) => !isKo(m)) ?? party[0], team[0]],
+    lieu,
+  );
   return {
     ...(ciel ? { weather: { kind: ciel, turns: 0, dehors: true as const } } : {}),
     kind: "dresseur",
@@ -525,11 +559,14 @@ function computeHit(
   // Cran d'Acier fait de l'altération une force : elle ne coupe plus rien.
   const brulure = physical && attacker.status === "brulure" && !talent.guts ? 0.5 : 1;
   const cran = talent.guts && attacker.status ? 1.5 : 1;
+  // Force Pure double l'Attaque, et seulement elle : le spécial n'y gagne rien.
+  const colosse = talent.hugePower && physical ? 2 : 1;
   const a =
     statOf(attacker, physical ? "atk" : "spa") *
     stageMult(physical ? attackerStages.atk : attackerStages.spa) *
     brulure *
-    cran;
+    cran *
+    colosse;
   const d =
     statOf(defender, physical ? "def" : "spd") *
     stageMult(physical ? defenderStages.def : defenderStages.spd);
@@ -541,7 +578,10 @@ function computeHit(
       : effectiveness(mv.type, typesOf(defender));
   if (eff === 0) return { damage: 0, eff: 0, crit: false, missed: false };
 
-  const crit = rand() < 1 / 16;
+  const garde = abilityRules(defender.id);
+  // Épaisseur : le type passe, mais amorti de moitié.
+  const epais = garde.halve?.includes(mv.type) ? 0.5 : 1;
+  const crit = !garde.noCrit && rand() < 1 / 16;
   const stab = typesOf(attacker).includes(mv.type) ? 1.5 : 1;
   // Ce que l'attaquant porte enfle le coup ; ce que la cible porte l'amortit.
   const porte = holdRules(attacker.held).power ?? 1;
@@ -550,6 +590,9 @@ function computeHit(
   // Engrais, Brasier, Torrent et Essaim : le dos au mur, on frappe plus fort.
   const acule =
     talent.pinch === mv.type && attacker.hp <= maxHp(attacker) * PINCH ? 1.5 : 1;
+  // Technicien : ce qui frappe peu frappe mieux.
+  const technique =
+    talent.technician && mv.power <= TECHNICIAN_POWER ? TECHNICIAN_BOOST : 1;
   const variance = (85 + roll(16)) / 100;
 
   const base =
@@ -561,7 +604,8 @@ function computeHit(
     damage: Math.max(
       1,
       Math.floor(
-        (base * stab * eff * acule * porte * temps * (crit ? 2 : 1) * variance) / amorti,
+        (base * stab * eff * acule * technique * porte * temps * epais * (crit ? 2 : 1) * variance) /
+          amorti,
       ),
     ),
     eff,
@@ -636,7 +680,10 @@ function applyMove(
     const lower = mv.lower;
     if (lower) {
       const stages = fromPlayer ? state.foeStages : state.playerStages;
-      if (stages[lower.stat] <= -6) {
+      // Œil Compose, Tranche-Muscle : certaines statistiques ne se touchent pas.
+      if (abilityRules(defender.id).keeps?.includes(lower.stat)) {
+        messages.push(`${defender.name} n'en tient pas compte.`);
+      } else if (stages[lower.stat] <= -6) {
         messages.push(`La stat de ${defender.name} ne peut pas baisser plus !`);
       } else {
         stages[lower.stat] -= lower.stages;
@@ -667,7 +714,7 @@ function applyMove(
     attacker.hp = Math.min(maxHp(attacker), attacker.hp + vole);
     messages.push(`${who(attacker, fromPlayer)} absorbe l'énergie de son adversaire.`);
   }
-  if (mv.recoil && porte > 0) {
+  if (mv.recoil && porte > 0 && !abilityRules(attacker.id).noRecoil) {
     const retour = Math.max(1, Math.floor(porte * mv.recoil));
     attacker.hp = Math.max(0, attacker.hp - retour);
     messages.push(`${who(attacker, fromPlayer)} accuse le contrecoup !`);
@@ -688,8 +735,16 @@ function applyMove(
   if (riposte && mv.category === "physique" && rand() < riposte.chance) {
     inflict(attacker, riposte.status, fromPlayer, messages);
   }
+  // Peau Dure, Épine de Fer : le contact écorche celui qui l'a cherché.
+  const epines = abilityRules(defender.id).barbs;
+  if (epines && mv.category === "physique" && !isKo(attacker)) {
+    const perte = Math.max(1, Math.floor(maxHp(attacker) * epines));
+    attacker.hp = Math.max(0, attacker.hp - perte);
+    messages.push(`${who(attacker, fromPlayer)} se blesse sur son adversaire !`);
+    if (isKo(attacker)) tombe(attacker, fromPlayer, messages);
+  }
   if (mv.confuses && rand() < mv.confuses) confuse(defender, !fromPlayer, messages);
-  if (mv.flinch && rand() < mv.flinch) {
+  if (mv.flinch && rand() < mv.flinch && !abilityRules(defender.id).noFlinch) {
     state.flinched = fromPlayer ? "foe" : "mine";
     messages.push(`${who(defender, !fromPlayer)} a peur !`);
   }
@@ -781,10 +836,12 @@ function foeChoice(state: BattleState): number {
 
 // Un Pokémon paralysé ne court plus qu'au quart de sa vitesse ; les Lunettes
 // Choix, elles, font toujours passer devant à priorité égale.
-const speed = (mon: Mon, stages: Stages) =>
+const speed = (mon: Mon, stages: Stages, weather?: Weather) =>
   statOf(mon, "spe") *
   stageMult(stages.spe) *
   (mon.status === "paralysie" ? 0.25 : 1) *
+  // Chlorophylle, Glissade, Turbo Sable : le bon temps double la foulée.
+  (weather && abilityRules(mon.id).rush === weather ? 2 : 1) *
   (holdRules(mon.held).quick ? 1e6 : 1);
 
 /* ------------------------------------------------------- fin de combat */
@@ -917,7 +974,7 @@ function foeSwitch(state: BattleState, index: number, messages: string[]): void 
   messages.push(
     `${state.trainer?.name ?? "L'adversaire"} rappelle ${sortant.name} et envoie ${entrant.name} !`,
   );
-  onEnter(entrant, state.playerStages, activeMon(state), false, messages);
+  onEnter(entrant, state.playerStages, activeMon(state), false, messages, state);
 }
 
 /** Le camp adverse est-il vaincu ? Enchaîne sur le Pokémon suivant sinon. */
@@ -932,7 +989,7 @@ function afterFoeDown(state: BattleState, messages: string[]): void {
     state.foeTeam = state.foeTeam.filter((_, i) => i !== suivant);
     state.foeStages = noStages();
     messages.push(`${state.trainer?.name ?? "L'adversaire"} envoie ${state.foe.name} !`);
-    onEnter(state.foe, state.playerStages, activeMon(state), false, messages);
+    onEnter(state.foe, state.playerStages, activeMon(state), false, messages, state);
     return;
   }
 
@@ -984,8 +1041,8 @@ export function playerMove(prev: BattleState, moveIndex: number): Turn {
   // Se soigner ou changer de Pokémon passe avant toute attaque, comme un
   // objet lancé par le joueur.
   const theirPriority = plan.do === "attaque" ? (theirs ? (MOVES[theirs.id].priority ?? 0) : -99) : 6;
-  const mySpeed = speed(activeMon(state), state.playerStages);
-  const theirSpeed = speed(state.foe, state.foeStages);
+  const mySpeed = speed(activeMon(state), state.playerStages, state.weather?.kind);
+  const theirSpeed = speed(state.foe, state.foeStages, state.weather?.kind);
   const playerFirst =
     myPriority !== theirPriority
       ? myPriority > theirPriority
@@ -1056,7 +1113,10 @@ function endOfTurn(state: BattleState, messages: string[]): void {
   const mine = activeMon(state);
   if (isKo(mine) || isKo(state.foe)) return;
 
-  if (speed(mine, state.playerStages) >= speed(state.foe, state.foeStages)) {
+  if (
+    speed(mine, state.playerStages, state.weather?.kind) >=
+    speed(state.foe, state.foeStages, state.weather?.kind)
+  ) {
     residual(mine, true, messages);
     residual(state.foe, false, messages);
   } else {
@@ -1068,6 +1128,8 @@ function endOfTurn(state: BattleState, messages: string[]): void {
   heldTick(mine, true, messages);
   heldTick(state.foe, false, messages);
 
+  shedTick(activeMon(state), true, messages);
+  shedTick(state.foe, false, messages);
   weatherTick(state, messages);
 }
 
@@ -1075,6 +1137,16 @@ function endOfTurn(state: BattleState, messages: string[]): void {
  * Le temps s'écoule : la tempête de sable gratte ceux qu'elle n'épargne pas,
  * puis la météo se dissipe au bout de quelques tours.
  */
+/** Mue : un tour sur trois, l'altération tombe toute seule. */
+export function shedTick(mon: Mon, mine: boolean, messages: string[]): void {
+  const chance = abilityRules(mon.id).shed;
+  if (!chance || !mon.status || isKo(mon)) return;
+  if (rand() >= chance) return;
+  mon.status = null;
+  mon.sleep = 0;
+  messages.push(`${who(mon, mine)} se débarrasse de son mal en muant.`);
+}
+
 function weatherTick(state: BattleState, messages: string[]): void {
   if (!state.weather) return;
 
@@ -1176,8 +1248,8 @@ export function tryRun(prev: BattleState): Turn {
   }
 
   state.runAttempts += 1;
-  const mine = speed(activeMon(state), state.playerStages);
-  const theirs = speed(state.foe, state.foeStages);
+  const mine = speed(activeMon(state), state.playerStages, state.weather?.kind);
+  const theirs = speed(state.foe, state.foeStages, state.weather?.kind);
   const odds = theirs === 0 ? 256 : ((mine * 128) / theirs + 30 * state.runAttempts) % 256;
 
   if (mine >= theirs || roll(256) < odds) {
@@ -1265,7 +1337,7 @@ export function switchTo(prev: BattleState, index: number): Turn {
   state.playerStages = noStages();
   state.mustSwitch = false;
   messages.push(`En avant, ${activeMon(state).name} !`);
-  onEnter(activeMon(state), state.foeStages, state.foe, true, messages);
+  onEnter(activeMon(state), state.foeStages, state.foe, true, messages, state);
 
   if (!forced) {
     foeActs(state, messages);
