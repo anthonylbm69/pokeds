@@ -29,7 +29,11 @@ import {
   isRod,
   isStone,
   isVitamine,
+  isBaie,
+  isRepousse,
   VITAMINES,
+  BAIES,
+  REPEL_STEPS,
   POCKETS,
   POCKET_FR,
   firstPocket,
@@ -55,6 +59,7 @@ import {
   relearnable,
   stoneEffectOn,
   vitamineEffectOn,
+  baieEffectOn,
   hasFlag,
   towerFoe,
   towerReward,
@@ -303,6 +308,47 @@ export function worldScreen(
             ],
           };
         }
+        // Une Repousse ne vise personne : elle s'emploie sur place.
+        if (isRepousse(item)) {
+          return {
+            title: ITEMS[item].name,
+            hint: "A pour l'employer · B pour revenir",
+            layout: "list",
+            list: [
+              {
+                id: "repousse",
+                label: "L'EMPLOYER",
+                sub: game.repel > 0
+                  ? `une Repousse agit déjà (${game.repel} pas)`
+                  : `${REPEL_STEPS[item]} pas sans rencontre`,
+                disabled: game.repel > 0,
+                tone: "fight" as const,
+              },
+              back,
+            ],
+          };
+        }
+
+        // Une baie rabaisse ce qu'une vitamine a poussé.
+        if (isBaie(item)) {
+          const stat = BAIES[item].stat;
+          return {
+            title: `${ITEMS[item].name} — à qui ?`,
+            hint: "▲ ▼ pour choisir · A pour faire manger · B pour revenir",
+            layout: "list",
+            list: [
+              ...game.party.map((mon, i) => ({
+                id: `mon:${i}`,
+                ...monLine(mon),
+                sub: `${STAT_FR[stat]} ${mon.evs?.[stat] ?? 0} · ${evTotal(mon.evs)} en tout`,
+                disabled: baieEffectOn(item, mon).refus !== null,
+                tone: "party" as const,
+              })),
+              back,
+            ],
+          };
+        }
+
         // Une vitamine se boit : on montre où chacun en est.
         if (isVitamine(item)) {
           const stat = VITAMINES[item].stat;

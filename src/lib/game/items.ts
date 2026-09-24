@@ -26,7 +26,33 @@ export type ItemId =
   | StoneId
   | RodId
   | VitamineId
+  | BaieId
+  | "repousse"
+  | "super-repousse"
   | `ct-${MoveId}`;
+
+/**
+ * Les baies d'entraînement : le pendant des vitamines. Une vitamine pousse
+ * une statistique d'effort, une baie la rabaisse — de quoi corriger un
+ * élevage parti de travers sans repartir de zéro.
+ */
+export const BAIES = {
+  "baie-oran-rouge": { name: "Baie Kika", stat: "hp" },
+  "baie-tamato": { name: "Baie Tamato", stat: "atk" },
+  "baie-qualot": { name: "Baie Qualot", stat: "def" },
+  "baie-hondrew": { name: "Baie Hondrew", stat: "spa" },
+  "baie-grepa": { name: "Baie Grepa", stat: "spd" },
+  "baie-pomroz": { name: "Baie Pomroz", stat: "spe" },
+} as const satisfies Record<string, { name: string; stat: StatKey }>;
+
+export type BaieId = keyof typeof BAIES;
+
+/** Ce qu'une baie retire d'un coup. */
+export const BAIE_EV = 10;
+const BAIE_PRICE = 900;
+
+/** Combien de pas une Repousse tient à l'écart des hautes herbes. */
+export const REPEL_STEPS = { repousse: 100, "super-repousse": 250 } as const;
 
 /**
  * Les vitamines. Chacune pousse une statistique d'effort ; elles coûtent cher
@@ -108,7 +134,9 @@ export type ItemKind =
   | "pp"
   | "pierre"
   | "canne"
-  | "vitamine";
+  | "vitamine"
+  | "baie"
+  | "repousse";
 
 export type Item = {
   name: string;
@@ -188,6 +216,13 @@ export const ctMove = (id: ItemId): MoveId | null =>
 const ctPrice = (move: MoveId) =>
   Math.max(1500, Math.round((MOVES[move].power || 60) * 40));
 
+const BAIE_ITEMS = Object.fromEntries(
+  (Object.keys(BAIES) as BaieId[]).map((id) => [
+    id,
+    { name: BAIES[id].name, price: BAIE_PRICE, kind: "baie" as const },
+  ]),
+) as Record<ItemId, Item>;
+
 const VITAMINE_ITEMS = Object.fromEntries(
   (Object.keys(VITAMINES) as VitamineId[]).map((id) => [
     id,
@@ -229,6 +264,9 @@ export const ITEMS: Record<ItemId, Item> = {
   ...STONE_ITEMS,
   ...ROD_ITEMS,
   ...VITAMINE_ITEMS,
+  ...BAIE_ITEMS,
+  repousse: { name: "Repousse", price: 700, kind: "repousse" },
+  "super-repousse": { name: "Super Repousse", price: 1500, kind: "repousse" },
   ball: { name: "Poké Ball", price: 200, kind: "ball", bonus: 1 },
   superball: { name: "Super Ball", price: 600, kind: "ball", bonus: 1.5 },
   hyperball: { name: "Hyper Ball", price: 1200, kind: "ball", bonus: 2 },
@@ -298,7 +336,10 @@ export const ITEM_ORDER: ItemId[] = [
   "lunettes",
   "huile",
   "elixir",
+  "repousse",
+  "super-repousse",
   ...(Object.keys(VITAMINES) as VitamineId[]),
+  ...(Object.keys(BAIES) as BaieId[]),
   ...RODS,
   ...STONES,
   // Les Capsules ferment la marche : elles sont nombreuses et rares.
@@ -316,7 +357,9 @@ export const emptyBag = (): Bag => ({
   masterball: 0,
   restes: 0, ceinture: 0, "baie-oran": 0, "roche-royale": 0, lunettes: 0,
   huile: 0, elixir: 0,
+  repousse: 0, "super-repousse": 0,
   ...Object.fromEntries(Object.keys(VITAMINES).map((v) => [v, 0])),
+  ...Object.fromEntries(Object.keys(BAIES).map((b) => [b, 0])),
   ...Object.fromEntries(RODS.map((r) => [r, 0])),
   ...Object.fromEntries(STONES.map((s) => [s, 0])),
   ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
@@ -431,6 +474,13 @@ export function refillPP(item: ItemId, mon: Mon, move = 0): Mon["moves"] {
   );
 }
 
+/** Une baie rabaisse une statistique d'effort : l'inverse d'une vitamine. */
+export const isBaie = (item: ItemId): item is BaieId => ITEMS[item].kind === "baie";
+
+/** Une Repousse ne se pose sur personne : elle tient les herbes à distance. */
+export const isRepousse = (item: ItemId): item is keyof typeof REPEL_STEPS =>
+  ITEMS[item].kind === "repousse";
+
 /** Une vitamine pousse une statistique d'effort, et se boit. */
 export const isVitamine = (item: ItemId): item is VitamineId =>
   ITEMS[item].kind === "vitamine";
@@ -479,6 +529,8 @@ export const POCKET_FR: Record<Pocket, string> = {
 const POCKET_OF: Record<ItemKind, Pocket> = {
   soin: "soins",
   rappel: "soins",
+  baie: "soins",
+  repousse: "objets",
   statut: "soins",
   pp: "soins",
   vitamine: "soins",

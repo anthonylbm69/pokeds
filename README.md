@@ -28,6 +28,7 @@ et une Tour de Combat pour l'après-Ligue.
 - des **pierres d'évolution** : Évoli a bien ses sept formes
 - des **objets à ramasser** dans le décor, et trois cannes à pêche
 - une **météo** qui appartient au lieu, et des **statistiques d'effort**
+- un **sac rangé en poches**, des Repousses et des baies d'entraînement
 - **deux emplacements de sauvegarde** et un export vers un fichier
 
 ## Lancer le jeu

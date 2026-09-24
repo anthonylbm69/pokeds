@@ -27,7 +27,12 @@ import {
   effectOn,
   isStone,
   isVitamine,
+  isBaie,
+  isRepousse,
   normaliseBag,
+  BAIES,
+  BAIE_EV,
+  REPEL_STEPS,
   VITAMINES,
   VITAMINE_EV,
   ppEffectOn,
@@ -79,6 +84,8 @@ export type GameState = {
   daycare: Daycare;
   /** Les œufs que l'on porte, et qui éclosent en marchant. */
   eggs: Egg[];
+  /** Pas restants sous Repousse : les hautes herbes se taisent jusque-là. */
+  repel: number;
   /** Meilleure série à la Tour de Combat, et série en cours. */
   towerBest: number;
   towerRun: number;
@@ -183,6 +190,7 @@ export function newGame(name: string): GameState {
     hall: [],
     daycare: emptyDaycare(),
     eggs: [],
+    repel: 0,
     towerBest: 0,
     towerRun: 0,
     flags: [],
@@ -506,6 +514,83 @@ export function applyVitamine(
       party: state.party.map((m, i) => (i === index ? { ...m, evs } : m)),
     },
     message: `${mon.name} gagne en ${STAT_FR[stat]} !`,
+  };
+}
+
+/** Le plus long qu'une Repousse puisse tenir : de quoi borner un fichier. */
+export const REPEL_MAX = Math.max(...Object.values(REPEL_STEPS));
+
+/** Ce qu'une baie retirerait à ce Pokémon, et pourquoi elle ne ferait rien. */
+export function baieEffectOn(
+  item: ItemId,
+  mon: Mon | undefined,
+): { stat: StatKey | null; refus: string | null } {
+  if (!isBaie(item)) return { stat: null, refus: "Ceci n'est pas une baie." };
+  if (!mon) return { stat: null, refus: "Aucun Pokémon à qui la donner." };
+  const stat = BAIES[item].stat;
+  const evs = { ...noEvs(), ...mon.evs };
+  if (evs[stat] <= 0) {
+    return { stat: null, refus: `${mon.name} n'a rien travaillé de ce côté.` };
+  }
+  return { stat, refus: null };
+}
+
+/**
+ * Fait manger une baie à un Pokémon de l'équipe : elle rabaisse une
+ * statistique d'effort, de quoi corriger un élevage parti de travers.
+ */
+export function applyBaie(
+  state: GameState,
+  item: ItemId,
+  index: number,
+): { state: GameState; message: string } {
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
+  const mon = state.party[index];
+  const { stat, refus } = baieEffectOn(item, mon);
+  if (refus || !stat) return { state, message: refus ?? "Rien ne se passe." };
+
+  const evs = { ...noEvs(), ...mon.evs, [stat]: Math.max(0, (mon.evs?.[stat] ?? 0) - BAIE_EV) };
+  return {
+    state: {
+      ...state,
+      bag: spend(state.bag, item),
+      party: state.party.map((m, i) => (i === index ? { ...m, evs } : m)),
+    },
+    message: `${mon.name} perd en ${STAT_FR[stat]}, mais se sent mieux.`,
+  };
+}
+
+/**
+ * Emploie une Repousse. Elle remplace le compte en cours plutôt que de s'y
+ * ajouter : deux flacons à la suite n'en font pas un double.
+ */
+export function applyRepousse(
+  state: GameState,
+  item: ItemId,
+): { state: GameState; message: string } {
+  if (!isRepousse(item)) return { state, message: "Ceci n'est pas une Repousse." };
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
+  if (state.repel > 0) {
+    return { state, message: "Une Repousse agit déjà." };
+  }
+  const pas = REPEL_STEPS[item];
+  return {
+    state: { ...state, bag: spend(state.bag, item), repel: pas },
+    message: `Les Pokémon sauvages se tiennent à distance. (${pas} pas)`,
+  };
+}
+
+/** Un pas de plus : la Repousse s'épuise. Rend l'état et ce qu'il y a à dire. */
+export function walkRepel(state: GameState): { state: GameState; message: string | null } {
+  if (state.repel <= 0) return { state, message: null };
+  const reste = state.repel - 1;
+  return {
+    state: { ...state, repel: reste },
+    message: reste === 0 ? "L'effet de la Repousse s'est dissipé." : null,
   };
 }
 
@@ -931,6 +1016,8 @@ export function reviveGame(brut: unknown): GameState | null {
           typeof data.daycare?.ready?.id === "number" ? data.daycare.ready : null,
       },
       eggs: (data.eggs ?? []).filter((e) => typeof e?.id === "number"),
+      // Un compteur bricolé ne doit pas rendre le monde muet pour toujours.
+      repel: Math.max(0, Math.min(REPEL_MAX, Math.floor(data.repel ?? 0) || 0)),
       towerBest: data.towerBest ?? 0,
       // Une série en cours ne survit pas à un rechargement : on repart de zéro.
       towerRun: 0,

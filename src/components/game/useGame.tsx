@@ -20,6 +20,8 @@ import {
   isRod,
   isStone,
   isVitamine,
+  isBaie,
+  isRepousse,
   firstPocket,
   nextPocket,
   type ItemId,
@@ -77,6 +79,9 @@ import {
   applyPP,
   applyStone,
   applyVitamine,
+  applyBaie,
+  applyRepousse,
+  walkRepel,
   enterHallOfFame,
   relearnMove,
   giveHeld,
@@ -774,11 +779,21 @@ export function useGame({
         }
       }
 
+      // La Repousse s'épuise au rythme des pas, où que l'on marche.
+      const sousRepousse = game.repel > 0;
+      if (sousRepousse) {
+        const { state: apres, message } = walkRepel(game);
+        setGame(apres);
+        if (message) {
+          setPhase({ kind: "text", lines: [message], i: 0, then: null });
+        }
+      }
+
       const dispo = game.party.some((m) => !isKo(m));
 
       // En mer, la faune est la même partout : les espèces d'eau du Pokédex.
       if (game.surfing && isWater(current, x, y) && dispo) {
-        if (Math.random() < ENCOUNTER_RATE) {
+        if (!sousRepousse && Math.random() < ENCOUNTER_RATE) {
           const roll = rollWaterEncounter();
           startWildBattle(roll.id, roll.level);
         }
@@ -786,7 +801,7 @@ export function useGame({
       }
 
       if (tileChar(current, x, y) === "," && dispo) {
-        if (Math.random() < ENCOUNTER_RATE) {
+        if (!sousRepousse && Math.random() < ENCOUNTER_RATE) {
           const roll = rollEncounter(current);
           // La nuit fait sortir d'autres bestioles que le plein jour.
           if (roll) startWildBattle(atNight(roll.id, momentNow()), roll.level);
@@ -1487,18 +1502,21 @@ export function useGame({
       }
 
       if (phase.kind === "sac") {
+        // La poche ouverte : chaque retour à la liste y ramène, plutôt que de
+        // renvoyer à la première.
+        const poche = phase.pocket ?? firstPocket(game.bag);
         if (choice.id === "leave") {
           setPhase({ kind: "world" });
           return;
         }
         if (choice.id === "back") {
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: null });
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: null });
           return;
         }
         if (phase.on === "objets") {
           setCursor(0);
-          setPhase({ kind: "sac", on: "cible", item: choice.id as ItemId, message: null });
+          setPhase({ kind: "sac", on: "cible", pocket: poche, item: choice.id as ItemId, message: null });
           return;
         }
 
@@ -1509,7 +1527,7 @@ export function useGame({
           const appris = teachMove(game, item, phase.cible ?? 0, Number(choice.id.split(":")[1]));
           setGame(appris.state);
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: appris.message });
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: appris.message });
           return;
         }
 
@@ -1556,12 +1574,29 @@ export function useGame({
           return;
         }
 
+        if (isRepousse(item)) {
+          const pose = applyRepousse(game, item);
+          setGame(pose.state);
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: pose.message });
+          return;
+        }
+
+        if (isBaie(item)) {
+          const rang = Number(choice.id.split(":")[1]);
+          const mange = applyBaie(game, item, rang);
+          setGame(mange.state);
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: mange.message });
+          return;
+        }
+
         if (isVitamine(item)) {
           const rang = Number(choice.id.split(":")[1]);
           const bu = applyVitamine(game, item, rang);
           setGame(bu.state);
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: bu.message });
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: bu.message });
           return;
         }
 
@@ -1572,7 +1607,7 @@ export function useGame({
           setCursor(0);
           // Une évolution mérite son défilement de texte, pas une ligne de menu.
           if (apres === game) {
-            setPhase({ kind: "sac", on: "objets", message: messages[0] });
+            setPhase({ kind: "sac", on: "objets", pocket: poche, message: messages[0] });
           } else {
             setPhase({ kind: "text", lines: messages, i: 0, then: null });
           }
@@ -1588,17 +1623,17 @@ export function useGame({
               const soin = applyPP(game, item, cible, 0);
               setGame(soin.state);
               setCursor(0);
-              setPhase({ kind: "sac", on: "objets", message: soin.message });
+              setPhase({ kind: "sac", on: "objets", pocket: poche, message: soin.message });
               return;
             }
             setCursor(0);
-            setPhase({ kind: "sac", on: "cible", item, cible, message: null });
+            setPhase({ kind: "sac", on: "cible", pocket: poche, item, cible, message: null });
             return;
           }
           const soin = applyPP(game, item, phase.cible ?? 0, Number(rang));
           setGame(soin.state);
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: soin.message });
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: soin.message });
           return;
         }
 
@@ -1606,7 +1641,7 @@ export function useGame({
           const donne = giveHeld(game, item, Number(choice.id.split(":")[1]));
           setGame(donne.state);
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: donne.message });
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: donne.message });
           return;
         }
 
@@ -1615,20 +1650,20 @@ export function useGame({
           // Quatre attaques déjà : il faut en céder une.
           if (game.party[cible].moves.length >= 4) {
             setCursor(0);
-            setPhase({ kind: "sac", on: "oubli", item, cible, message: null });
+            setPhase({ kind: "sac", on: "oubli", pocket: poche, item, cible, message: null });
             return;
           }
           const appris = teachMove(game, item, cible, -1);
           setGame(appris.state);
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: appris.message });
+          setPhase({ kind: "sac", on: "objets", pocket: poche, message: appris.message });
           return;
         }
 
         const soin = applyItem(game, item, Number(choice.id.split(":")[1]));
         setGame(soin.state);
         setCursor(0);
-        setPhase({ kind: "sac", on: "objets", message: soin.message });
+        setPhase({ kind: "sac", on: "objets", pocket: poche, message: soin.message });
         return;
       }
 
@@ -1712,7 +1747,7 @@ export function useGame({
       if (phase.kind === "world") {
         if (choice.id === "sac") {
           setCursor(0);
-          setPhase({ kind: "sac", on: "objets", message: null });
+          setPhase({ kind: "sac", on: "objets", pocket: firstPocket(game.bag), message: null });
         } else if (choice.id === "carte-dresseur") {
           setCursor(0);
           setPhase({ kind: "carte-dresseur" });
@@ -1892,7 +1927,14 @@ export function useGame({
             setCursor(0);
             // B remonte d'un cran : une liste rend la main au menu, le menu ferme.
             if (phase.on === "objets" || phase.on === "menu") setPhase({ kind: "world" });
-            else if (phase.kind === "sac") setPhase({ kind: "sac", on: "objets", message: null });
+            else if (phase.kind === "sac") {
+              setPhase({
+                kind: "sac",
+                on: "objets",
+                pocket: phase.pocket ?? firstPocket(game.bag),
+                message: null,
+              });
+            }
             else setPhase({ kind: "pc", on: "menu", message: null });
           }
           return;
