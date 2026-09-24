@@ -9,6 +9,10 @@ import {
   REGION,
   STEP,
   TILES,
+  ECART_EQUIPE,
+  ECART_HERBE,
+  PROGRESSION,
+  SAUT_MAX,
   followerSpot,
   groundAt,
   groundFlag,
@@ -615,5 +619,122 @@ describe("les objets posés au sol", () => {
   it("ne voit rien là où rien n'a été posé", () => {
     expect(groundAt(MAPS.bourg, 0, 0)).toBeNull();
     expect(groundAt(MAPS.route1, 9, 9)).toBeNull();
+  });
+});
+
+describe("la courbe de difficulté", () => {
+  /** Les niveaux de tous les dresseurs d'une carte, Champion compris. */
+  const niveaux = (id: MapId) =>
+    MAPS[id].npcs
+      .filter((n) => n.trainer)
+      .flatMap((n) => (n.trainer!.team ?? []).map((t) => t.level));
+
+  /** Les niveaux des hautes herbes d'une carte. */
+  const herbe = (id: MapId) =>
+    (MAPS[id].encounters ?? []).flatMap((e) => [e.min, e.max]);
+
+  const etapes = PROGRESSION.filter((id) => niveaux(id).length > 0);
+
+  it("couvre toute zone qui a un dresseur ou des hautes herbes", () => {
+    // Sans cela, une zone ajoutée échapperait silencieusement aux vérifications.
+    for (const [id, map] of maps) {
+      const compte = map.npcs.some((n) => n.trainer) || (map.encounters?.length ?? 0) > 0;
+      if (!compte) continue;
+      expect(PROGRESSION, `${id} hors de la progression`).toContain(id);
+    }
+  });
+
+  it("ne nomme pas deux fois la même zone", () => {
+    expect(new Set(PROGRESSION).size).toBe(PROGRESSION.length);
+  });
+
+  it("monte sans marche infranchissable", () => {
+    for (let i = 1; i < etapes.length; i++) {
+      const avant = etapes[i - 1];
+      const apres = etapes[i];
+      const saut = Math.min(...niveaux(apres)) - Math.max(...niveaux(avant));
+      expect(
+        saut,
+        `${avant} finit à ${Math.max(...niveaux(avant))} et ${apres} commence à ${Math.min(...niveaux(apres))}`,
+      ).toBeLessThanOrEqual(SAUT_MAX);
+    }
+  });
+
+  it("ne redescend jamais d'une zone entière", () => {
+    // Un creux serait aussi gênant qu'un mur : on n'entre pas dans une zone
+    // plus faible que le bas de la précédente.
+    for (let i = 1; i < etapes.length; i++) {
+      const avant = etapes[i - 1];
+      const apres = etapes[i];
+      expect(
+        Math.max(...niveaux(apres)),
+        `${apres} est plus faible que ${avant}`,
+      ).toBeGreaterThanOrEqual(Math.max(...niveaux(avant)));
+    }
+  });
+
+  it("place chaque Champion au-dessus de ses propres dresseurs", () => {
+    // Un Champion plus faible que ses sbires rend son Arène absurde.
+    for (const [id, map] of maps) {
+      const champion = map.npcs.find((n) => n.trainer?.badge);
+      if (!champion) continue;
+      const sien = Math.max(...(champion.trainer!.team ?? []).map((t) => t.level));
+      const autres = map.npcs
+        .filter((n) => n.trainer && n !== champion)
+        .flatMap((n) => (n.trainer!.team ?? []).map((t) => t.level));
+      if (!autres.length) continue;
+      expect(
+        sien,
+        `${id} : ${champion.trainer!.name} plafonne à ${sien}, ses dresseurs à ${Math.max(...autres)}`,
+      ).toBeGreaterThan(Math.max(...autres));
+    }
+  });
+
+  it("ne laisse de traînard dans l'équipe de personne", () => {
+    // Un Pokémon très en dessous de ses coéquipiers ne se bat pas : il
+    // s'écroule, et le dresseur perd tout son sens.
+    for (const [id, map] of maps) {
+      for (const npc of map.npcs) {
+        const equipe = (npc.trainer?.team ?? []).map((t) => t.level);
+        if (!equipe.length) continue;
+        const faible = Math.min(...equipe);
+        const fort = Math.max(...equipe);
+        expect(
+          faible / fort,
+          `${id} : ${npc.trainer!.name} aligne ${equipe.join("/")}`,
+        ).toBeGreaterThanOrEqual(ECART_EQUIPE);
+      }
+    }
+  });
+
+  it("donne une équipe à chaque Champion", () => {
+    for (const [id, map] of maps) {
+      const champion = map.npcs.find((n) => n.trainer?.badge);
+      if (!champion) continue;
+      expect((champion.trainer!.team ?? []).length, `${id} : équipe vide`).toBeGreaterThan(0);
+    }
+  });
+
+  it("accorde les hautes herbes aux dresseurs du lieu", () => {
+    for (const id of etapes) {
+      const sauvages = herbe(id);
+      if (!sauvages.length) continue;
+      const dres = niveaux(id);
+      expect(
+        Math.min(...sauvages),
+        `${id} : herbe à ${Math.min(...sauvages)}, dresseurs dès ${Math.min(...dres)}`,
+      ).toBeGreaterThanOrEqual(Math.min(...dres) - ECART_HERBE);
+      expect(
+        Math.max(...sauvages),
+        `${id} : herbe à ${Math.max(...sauvages)}, dresseurs jusqu'à ${Math.max(...dres)}`,
+      ).toBeLessThanOrEqual(Math.max(...dres) + ECART_HERBE);
+    }
+  });
+
+  it("laisse une montée peuplée avant le Conseil 4", () => {
+    // Le Plateau était un couloir vide : c'est là que le mur se formait.
+    const plateau = MAPS.ligue;
+    expect(plateau.npcs.filter((n) => n.trainer).length).toBeGreaterThanOrEqual(3);
+    expect(plateau.encounters?.length ?? 0).toBeGreaterThan(0);
   });
 });

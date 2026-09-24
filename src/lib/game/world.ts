@@ -1080,7 +1080,7 @@ export const MAPS: Record<MapId, MapSpec> = {
           sight: 2,
           reward: 2600,
           badge: "sylve",
-          team: [{ id: 384, level: 12 }],
+          team: [{ id: 384, level: 19 }],
           intro: [
             "Je suis Steven, Champion d'Aigueperse.",
             "On me dit excentrique de n'aligner qu'un seul Pokémon.",
@@ -1496,7 +1496,7 @@ export const MAPS: Record<MapId, MapSpec> = {
           badge: "roc",
           team: [
             { id: 500, level: 28 },
-            { id: 644, level: 15 },
+            { id: 644, level: 30 },
           ],
           intro: [
             "Je suis Anthony, Champion de Mions.",
@@ -1769,12 +1769,12 @@ export const MAPS: Record<MapId, MapSpec> = {
       "##.......==U......##",
       "##..TTTT.==..TTTT.##",
       "##..WWDW.==..WWDW.##",
-      "##.......==.......##",
+      "##.,,,,,.==.,,,,,.##",
       "##..S....==.......##",
       "##.......==.......##",
       "##..~~~..==..~~~..##",
       "##..~~~..==..~~~..##",
-      "##.......==.......##",
+      "##.,,,,,.==.,,,,,.##",
       "#########==#########",
     ],
     npcs: [
@@ -1789,6 +1789,93 @@ export const MAPS: Record<MapId, MapSpec> = {
           "Derrière ces portes : Yen, Christina, Will et Vic — puis leur capitaine.",
           "On ne ressort pas de la salle d'un membre sans l'avoir battu.",
         ],
+      },
+      // La montée du Plateau : quatre paliers entre la Route 8 et le Conseil 4,
+      // qui sautaient autrement de quinze niveaux d'un coup.
+      {
+        id: "gardienne-plateau",
+        x: 7,
+        y: 13,
+        dir: "right",
+        sprite: "exploratrice",
+        lines: ["On ne monte pas au Plateau en touriste."],
+        trainer: {
+          title: "Gardienne",
+          name: "Ombeline",
+          sight: 3,
+          reward: 2400,
+          team: [
+            { id: 508, level: 37 },
+            { id: 529, level: 38 },
+          ],
+          intro: ["La Ligue est plus haut. Montre-moi que tu mérites d'y aller."],
+          defeat: ["Passe. Mais les suivants ne seront pas plus tendres."],
+          after: ["Trois autres t'attendent sur la montée. Économise tes Potions."],
+        },
+      },
+      {
+        id: "ascete-plateau",
+        x: 13,
+        y: 11,
+        dir: "left",
+        sprite: "villageois",
+        lines: ["Je campe ici depuis l'automne. L'air y est plus clair."],
+        trainer: {
+          title: "Ascète",
+          name: "Barnabé",
+          sight: 4,
+          reward: 2700,
+          team: [
+            { id: 521, level: 40 },
+            { id: 248, level: 41 },
+          ],
+          intro: ["Le Plateau ne laisse monter que ceux qui savent pourquoi."],
+          defeat: ["Tu sais pourquoi. Continue."],
+          after: ["Le Centre est sur ta gauche. Sers-t'en avant la suite."],
+        },
+      },
+      {
+        id: "veteran-plateau",
+        x: 5,
+        y: 10,
+        dir: "right",
+        sprite: "prof",
+        lines: ["J'ai fait le Conseil 4 quatre fois. Jamais la cinquième."],
+        trainer: {
+          title: "Vétéran",
+          name: "Firmin",
+          sight: 4,
+          reward: 3000,
+          team: [
+            { id: 130, level: 43 },
+            { id: 448, level: 44 },
+          ],
+          intro: ["Voyons où tu en es vraiment, avant que Yen ne te le dise."],
+          defeat: ["Voilà. C'est exactement ce qu'il fallait montrer."],
+          after: ["Encore un, tout en haut. Le plus dur des quatre."],
+        },
+      },
+      {
+        id: "sentinelle-plateau",
+        x: 5,
+        y: 5,
+        dir: "right",
+        sprite: "championne",
+        lines: ["Les portes sont derrière moi. On ne passe pas comme ça."],
+        trainer: {
+          title: "Sentinelle",
+          name: "Roxane",
+          sight: 4,
+          reward: 3400,
+          team: [
+            { id: 503, level: 45 },
+            { id: 497, level: 46 },
+            { id: 508, level: 47 },
+          ],
+          intro: ["Dernier obstacle avant le Conseil 4. Je ne retiens rien."],
+          defeat: ["Les portes sont à toi. Bonne chance là-dedans."],
+          after: ["Yen ouvre le bal. Il frappe plus fort qu'il n'en a l'air."],
+        },
       },
     ],
     warps: [
@@ -1845,6 +1932,14 @@ export const MAPS: Record<MapId, MapSpec> = {
           "Ici s'arrêtent les Dresseurs. Ici commencent les champions.",
         ],
       },
+    ],
+    // La montée n'avait ni herbe ni personne : le saut vers le Conseil 4
+    // faisait quinze niveaux.
+    encounters: [
+      { id: 248, min: 36, max: 40, weight: 25 },
+      { id: 448, min: 36, max: 40, weight: 20 },
+      { id: 508, min: 37, max: 41, weight: 30 },
+      { id: 521, min: 38, max: 42, weight: 25 },
     ],
   },
 
@@ -2494,6 +2589,51 @@ export const REGION: RegionNode[] = [
 /** Nœud de la carte où se trouve le joueur, intérieurs compris. */
 export const regionNodeOf = (map: MapId): RegionNode | null =>
   REGION.find((node) => node.map === map || node.inside?.includes(map)) ?? null;
+
+/* --------------------------------------------------------- la progression */
+
+/**
+ * L'ordre dans lequel on traverse la région. Il ne sert pas au jeu : il sert
+ * à vérifier que la difficulté monte sans trou ni marche. Toute carte qui
+ * porte un dresseur ou des hautes herbes doit y figurer — un test s'en
+ * assure, pour qu'une zone ajoutée ne passe pas au travers.
+ */
+export const PROGRESSION: MapId[] = [
+  "route1",
+  "route2",
+  "route3",
+  "arene",
+  "route4",
+  "arene2",
+  "route5",
+  "route6",
+  "arene3",
+  "route7",
+  "route8",
+  "ligue",
+  "ligue1",
+  "ligue2",
+  "ligue3",
+  "ligue4",
+  "ligue5",
+];
+
+/**
+ * Le plus grand écart toléré entre la fin d'une zone et le début de la
+ * suivante. Au-delà, le joueur se retrouve face à un mur : c'est exactement
+ * ce qui séparait la Route 8 du Conseil 4.
+ */
+export const SAUT_MAX = 6;
+
+/**
+ * Part minimale que le plus faible d'une équipe doit représenter face au plus
+ * fort. Un traînard à la moitié du niveau de son aîné ne se bat pas : il
+ * s'écroule, et le dresseur perd tout son sens.
+ */
+export const ECART_EQUIPE = 0.75;
+
+/** De combien les hautes herbes peuvent s'écarter des dresseurs du lieu. */
+export const ECART_HERBE = 4;
 
 /* ------------------------------------------------ les Cars Faure */
 
