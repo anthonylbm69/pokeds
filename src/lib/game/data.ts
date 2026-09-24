@@ -214,6 +214,103 @@ const MOVE_DATA = {
   "danse-pluie": { name: "Danse Pluie", type: "water", category: "statut", power: 0, accuracy: 100, pp: 5, weather: "pluie" },
   zenith: { name: "Zénith", type: "fire", category: "statut", power: 0, accuracy: 100, pp: 5, weather: "soleil" },
   "tempete-sable": { name: "Tempête de Sable", type: "rock", category: "statut", power: 0, accuracy: 100, pp: 10, weather: "sable" },
+
+  /* ------------------------------------------------------------------------
+   * L'échelle de puissance, type par type.
+   *
+   * Le répertoire d'une espèce reconstituée se déduit de ses types : pour
+   * chacun, la plus forte attaque que son niveau autorise. Avec deux attaques
+   * dans un type, tout Pokémon de ce type connaissait la même chose à tous les
+   * niveaux — c'est ce qui faisait qu'un duel ressemblait au précédent. Chaque
+   * type a désormais quatre paliers au moins, du coup d'appoint au coup lourd.
+   * ------------------------------------------------------------------------ */
+
+  // Feu
+  "roue-de-feu": { name: "Roue de Feu", type: "fire", category: "physique", power: 60, accuracy: 100, pp: 25, inflicts: { status: "brulure", chance: 0.1 } },
+  deflagration: { name: "Déflagration", type: "fire", category: "speciale", power: 110, accuracy: 85, pp: 5, inflicts: { status: "brulure", chance: 0.1 } },
+  boutefeu: { name: "Boutefeu", type: "fire", category: "physique", power: 120, accuracy: 100, pp: 15, recoil: 0.33 },
+
+  // Eau
+  "aqua-jet": { name: "Aqua-Jet", type: "water", category: "physique", power: 40, accuracy: 100, pp: 20, priority: 1 },
+  ecume: { name: "Écume", type: "water", category: "speciale", power: 50, accuracy: 100, pp: 30 },
+  vibraqua: { name: "Vibraqua", type: "water", category: "speciale", power: 60, accuracy: 100, pp: 20, confuses: 0.2 },
+  cascade: { name: "Cascade", type: "water", category: "physique", power: 80, accuracy: 100, pp: 15, flinch: 0.2 },
+
+  // Plante
+  "giga-sangsue": { name: "Giga-Sangsue", type: "grass", category: "speciale", power: 75, accuracy: 100, pp: 10, drain: 0.5 },
+  "eco-sphere": { name: "Éco-Sphère", type: "grass", category: "speciale", power: 90, accuracy: 100, pp: 10 },
+
+  // Électrik
+  "poing-eclair": { name: "Poing-Éclair", type: "electric", category: "physique", power: 75, accuracy: 100, pp: 15, inflicts: { status: "paralysie", chance: 0.1 } },
+  "fatal-foudre": { name: "Fatal-Foudre", type: "electric", category: "speciale", power: 110, accuracy: 70, pp: 10, inflicts: { status: "paralysie", chance: 0.3 } },
+  electacle: { name: "Électacle", type: "electric", category: "physique", power: 120, accuracy: 100, pp: 15, recoil: 0.33 },
+
+  // Glace
+  "ball-glace": { name: "Ball'Glace", type: "ice", category: "speciale", power: 30, accuracy: 90, pp: 30, multi: true },
+  "poing-glace": { name: "Poing-Glace", type: "ice", category: "physique", power: 75, accuracy: 100, pp: 15, inflicts: { status: "gel", chance: 0.1 } },
+  "laser-glace": { name: "Laser Glace", type: "ice", category: "speciale", power: 90, accuracy: 100, pp: 10, inflicts: { status: "gel", chance: 0.1 } },
+
+  // Combat
+  "poing-karate": { name: "Poing-Karaté", type: "fighting", category: "physique", power: 50, accuracy: 100, pp: 25 },
+  "double-pied": { name: "Double Pied", type: "fighting", category: "physique", power: 30, accuracy: 100, pp: 30, multi: true },
+  "close-combat": { name: "Close Combat", type: "fighting", category: "physique", power: 120, accuracy: 100, pp: 5 },
+  "exploforce": { name: "Exploforce", type: "fighting", category: "speciale", power: 120, accuracy: 70, pp: 5 },
+
+  // Poison
+  detritus: { name: "Détritus", type: "poison", category: "speciale", power: 65, accuracy: 100, pp: 15, inflicts: { status: "poison", chance: 0.3 } },
+  "bomb-beurk": { name: "Bomb-Beurk", type: "poison", category: "speciale", power: 90, accuracy: 100, pp: 10, inflicts: { status: "poison", chance: 0.3 } },
+
+  // Sol
+  "coud-boue": { name: "Coud'Boue", type: "ground", category: "speciale", power: 55, accuracy: 95, pp: 10, lower: { stat: "acc", stages: 1 } },
+  telluriforce: { name: "Telluriforce", type: "ground", category: "speciale", power: 90, accuracy: 100, pp: 10 },
+
+  // Vol
+  "bec-vrille": { name: "Bec Vrille", type: "flying", category: "physique", power: 80, accuracy: 100, pp: 20 },
+  rapace: { name: "Rapace", type: "flying", category: "physique", power: 120, accuracy: 100, pp: 15, recoil: 0.33 },
+  "cyclone": { name: "Cyclone", type: "flying", category: "statut", power: 0, accuracy: 100, pp: 20, lower: { stat: "atk", stages: 1 } },
+
+  // Psy
+  hypnose: { name: "Hypnose", type: "psychic", category: "statut", power: 0, accuracy: 60, pp: 20, inflicts: { status: "sommeil", chance: 1 } },
+  "psykoud-boul": { name: "Psykoud'Boul", type: "psychic", category: "physique", power: 80, accuracy: 90, pp: 15 },
+
+  // Insecte
+  "plaie-croix": { name: "Plaie-Croix", type: "bug", category: "physique", power: 80, accuracy: 100, pp: 20 },
+  "papillodanse": { name: "Papillodanse", type: "bug", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "spa", stages: 1 } },
+
+  // Roche
+  "eclate-roc": { name: "Éclate-Roc", type: "rock", category: "physique", power: 40, accuracy: 100, pp: 15, lower: { stat: "def", stages: 1 } },
+  "lame-de-roc": { name: "Lame de Roc", type: "rock", category: "physique", power: 100, accuracy: 80, pp: 10 },
+  "pouvoir-antique": { name: "Pouvoir Antique", type: "rock", category: "speciale", power: 60, accuracy: 100, pp: 5, raise: { stat: "atk", stages: 1 } },
+
+  // Spectre
+  lechouille: { name: "Léchouille", type: "ghost", category: "physique", power: 30, accuracy: 100, pp: 30, inflicts: { status: "paralysie", chance: 0.3 } },
+  "ball-ombre": { name: "Ball'Ombre", type: "ghost", category: "speciale", power: 80, accuracy: 100, pp: 15 },
+  devoreve: { name: "Dévorêve", type: "ghost", category: "speciale", power: 100, accuracy: 100, pp: 15, drain: 0.5 },
+
+  // Dragon
+  "griffe-dragon": { name: "Griffe Dragon", type: "dragon", category: "physique", power: 80, accuracy: 100, pp: 15 },
+  dracochoc: { name: "Dracochoc", type: "dragon", category: "speciale", power: 85, accuracy: 100, pp: 10 },
+  "danse-draco": { name: "Danse Draco", type: "dragon", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "atk", stages: 1 } },
+
+  // Ténèbres
+  machination: { name: "Machination", type: "dark", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "spa", stages: 2 } },
+  "coup-bas": { name: "Coup Bas", type: "dark", category: "physique", power: 40, accuracy: 100, pp: 5, priority: 1 },
+
+  // Acier
+  "mur-de-fer": { name: "Mur de Fer", type: "steel", category: "statut", power: 0, accuracy: 100, pp: 15, raise: { stat: "def", stages: 2 } },
+  luminocanon: { name: "Luminocanon", type: "steel", category: "speciale", power: 80, accuracy: 100, pp: 10, lower: { stat: "spa", stages: 1 } },
+  "poing-meteore": { name: "Poing Météore", type: "steel", category: "physique", power: 90, accuracy: 90, pp: 10, raise: { stat: "atk", stages: 1 } },
+
+  // Trois renforcements qui manquaient à leur type. Les autres types n'en
+  // ont pas dans la Génération V : on ne va pas en inventer.
+  gonflette: { name: "Gonflette", type: "fighting", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "atk", stages: 1 } },
+  acidarmure: { name: "Acidarmure", type: "poison", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "def", stages: 2 } },
+  chargeur: { name: "Chargeur", type: "electric", category: "statut", power: 0, accuracy: 100, pp: 20, raise: { stat: "spd", stages: 1 } },
+
+  // Fée
+  "vibra-soin": { name: "Vœu Soin", type: "fairy", category: "statut", power: 0, accuracy: 100, pp: 10, raise: { stat: "spd", stages: 1 } },
+  "force-lunaire": { name: "Force Lunaire", type: "fairy", category: "speciale", power: 95, accuracy: 100, pp: 15, lower: { stat: "spa", stages: 1 } },
+  "pouvoir-lunaire": { name: "Pouvoir Lunaire", type: "fairy", category: "speciale", power: 60, accuracy: 100, pp: 15, confuses: 0.3 },
 } as const satisfies Record<string, Move>;
 
 export type MoveId = keyof typeof MOVE_DATA;

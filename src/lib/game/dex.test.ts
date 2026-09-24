@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MOVES, SPECIES, TYPE_FR, species, typedMoveset, type TypeName } from "./data";
+import {
+  MOVES,
+  SPECIES,
+  TYPE_FR,
+  species,
+  typedMoveset,
+  type MoveId,
+  type TypeName,
+} from "./data";
 import { DEX, DEX_MAX, EVOLUTIONS, WILD_POOL } from "./dex";
 import { createMon, statOf, maxHp } from "./battle";
 
@@ -128,9 +136,15 @@ describe("les répertoires déduits des types", () => {
       typedMoveset(["fire"], level).reduce((max, m) => Math.max(max, MOVES[m].power), 0);
     expect(force(3)).toBeLessThan(force(20));
     expect(force(20)).toBeLessThanOrEqual(force(60));
-    // Un sauvage de niveau trois ne lance pas de Lance-Flammes.
-    expect(typedMoveset(["fire"], 3)).not.toContain("lance-flammes");
-    expect(typedMoveset(["fire"], 60)).toContain("lance-flammes");
+
+    // La plus forte attaque du type, quelle qu'elle soit : elle revient à
+    // haut niveau et jamais au troisième. On ne la nomme pas — le catalogue
+    // grandit, et un test ne doit pas figer son sommet.
+    const sommet = (Object.keys(MOVES) as MoveId[])
+      .filter((m) => MOVES[m].type === "fire")
+      .reduce((a, b) => (MOVES[a].power >= MOVES[b].power ? a : b));
+    expect(typedMoveset(["fire"], 3)).not.toContain(sommet);
+    expect(force(60)).toBe(MOVES[sommet].power);
   });
 });
 
@@ -151,5 +165,67 @@ describe("les créatures nées du Pokédex", () => {
     expect(pikachu.base.spe).toBe(90);
     expect(pikachu.name).toBe("Pikachu");
     expect(pikachu.types).toEqual(["electric"]);
+  });
+});
+
+describe("le catalogue d'attaques", () => {
+  const ids = Object.keys(MOVES) as MoveId[];
+  const types = Object.keys(TYPE_FR) as TypeName[];
+  const offensives = (t: TypeName) =>
+    ids.filter((id) => MOVES[id].type === t && MOVES[id].category !== "statut");
+
+  it("donne à chaque type de quoi frapper à plusieurs paliers", () => {
+    // Le répertoire d'une espèce reconstituée se déduit de ses types : avec
+    // deux attaques dans un type, tous ses Pokémon connaissaient la même
+    // chose à tous les niveaux.
+    for (const t of types) {
+      expect(offensives(t).length, `${TYPE_FR[t]} : trop peu d'attaques`).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("étale ces paliers, au lieu de les empiler au même endroit", () => {
+    for (const t of types) {
+      const forces = offensives(t).map((id) => MOVES[id].power);
+      const ecart = Math.max(...forces) - Math.min(...forces);
+      expect(ecart, `${TYPE_FR[t]} : paliers trop serrés`).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it("fait monter le répertoire déduit avec le niveau, pour tous les types", () => {
+    for (const t of types) {
+      const force = (level: number) =>
+        typedMoveset([t], level).reduce((max, m) => Math.max(max, MOVES[m].power), 0);
+      expect(force(5), `${TYPE_FR[t]}`).toBeLessThan(force(60));
+    }
+  });
+
+  it("ne laisse aucune attaque sans nom, ni deux au même nom", () => {
+    const noms = ids.map((id) => MOVES[id].name);
+    for (const nom of noms) expect(nom.length).toBeGreaterThan(0);
+    expect(new Set(noms).size, "deux attaques portent le même nom").toBe(noms.length);
+  });
+
+  it("garde des chiffres plausibles", () => {
+    for (const id of ids) {
+      const mv = MOVES[id];
+      expect(mv.accuracy, `${mv.name}`).toBeGreaterThan(0);
+      expect(mv.accuracy, `${mv.name}`).toBeLessThanOrEqual(100);
+      expect(mv.pp, `${mv.name}`).toBeGreaterThan(0);
+      if (mv.category === "statut") expect(mv.power, `${mv.name}`).toBe(0);
+      else expect(mv.power, `${mv.name}`).toBeGreaterThan(0);
+      // Une attaque qui frappe fort se paie : peu de PP, ou peu de précision.
+      if (mv.power >= 110) expect(mv.pp, `${mv.name}`).toBeLessThanOrEqual(15);
+    }
+  });
+
+  it("ne rend jamais un répertoire vide, quel que soit le type ou le niveau", () => {
+    for (const t of types) {
+      for (const level of [1, 5, 20, 50, 100]) {
+        const rep = typedMoveset([t], level);
+        expect(rep.length, `${TYPE_FR[t]} N.${level}`).toBeGreaterThanOrEqual(2);
+        expect(rep.length).toBeLessThanOrEqual(4);
+        expect(new Set(rep).size, `${TYPE_FR[t]} N.${level} : doublon`).toBe(rep.length);
+      }
+    }
   });
 });
