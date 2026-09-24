@@ -25,6 +25,9 @@ et une Tour de Combat pour l'après-Ligue.
 - un **PC** dans les Centres, des Capsules Techniques, un sac complet
 - une **Pension** : confiez-en deux, marchez, et un œuf finit par éclore
 - un **Maître des Capacités** qui réveille les attaques oubliées
+- des **pierres d'évolution** : Évoli a bien ses sept formes
+- des **objets à ramasser** dans le décor, et trois cannes à pêche
+- une **météo** qui appartient au lieu, et des **statistiques d'effort**
 - **deux emplacements de sauvegarde** et un export vers un fichier
 
 ## Lancer le jeu

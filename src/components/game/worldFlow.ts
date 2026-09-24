@@ -5,7 +5,18 @@
  * l'enchaînement des phases.
  */
 
-import { MOVES, TYPE_FR, expForLevel, species, type MoveId } from "@/lib/game/data";
+import {
+  EV_MAX_STAT,
+  EV_MAX_TOTAL,
+  MOVES,
+  STAT_FR,
+  TYPE_FR,
+  evTotal,
+  expForLevel,
+  species,
+  type MoveId,
+  type StatKey,
+} from "@/lib/game/data";
 import { STATUS_FR, maxHp, statOf, type Mon } from "@/lib/game/battle";
 import {
   ITEMS,
@@ -18,6 +29,8 @@ import {
   isPP,
   isRod,
   isStone,
+  isVitamine,
+  VITAMINES,
   ppEffectOn,
   type ItemId,
 } from "@/lib/game/items";
@@ -37,6 +50,7 @@ import {
   hallTime,
   relearnable,
   stoneEffectOn,
+  vitamineEffectOn,
   hasFlag,
   towerFoe,
   towerReward,
@@ -283,6 +297,30 @@ export function worldScreen(
             ],
           };
         }
+        // Une vitamine se boit : on montre où chacun en est.
+        if (isVitamine(item)) {
+          const stat = VITAMINES[item].stat;
+          return {
+            title: `${ITEMS[item].name} — à qui ?`,
+            hint: "▲ ▼ pour choisir · A pour faire boire · B pour revenir",
+            layout: "list",
+            list: [
+              ...game.party.map((mon, i) => {
+                const { refus } = vitamineEffectOn(item, mon);
+                const evs = mon.evs?.[stat] ?? 0;
+                return {
+                  id: `mon:${i}`,
+                  ...monLine(mon),
+                  sub: `${STAT_FR[stat]} ${evs}/${EV_MAX_STAT} · ${evTotal(mon.evs)}/${EV_MAX_TOTAL} en tout`,
+                  disabled: refus !== null,
+                  tone: "party" as const,
+                };
+              }),
+              back,
+            ],
+          };
+        }
+
         // Une canne ne vise personne : elle part à l'eau, ou nulle part.
         if (isRod(item)) {
           return {
@@ -522,6 +560,21 @@ export function worldScreen(
             id: "stats",
             label: `Att ${statOf(mon, "atk")} · Déf ${statOf(mon, "def")} · Vit ${statOf(mon, "spe")}`,
             sub: `Att.Spé ${statOf(mon, "spa")} · Déf.Spé ${statOf(mon, "spd")} — exp. ${mon.exp - socle}`,
+            disabled: true,
+            tone: "plain" as const,
+          },
+          {
+            id: "effort",
+            // L'effort est invisible dans les jeux d'origine ; ici on le dit,
+            // sinon personne ne saurait qu'il faut choisir ses adversaires.
+            label: `Effort ${evTotal(mon.evs)} / ${EV_MAX_TOTAL}`,
+            sub:
+              evTotal(mon.evs) === 0
+                ? "il n'a encore rien travaillé"
+                : (Object.keys(STAT_FR) as StatKey[])
+                    .filter((k) => (mon.evs?.[k] ?? 0) > 0)
+                    .map((k) => `${STAT_FR[k]} +${mon.evs[k]}`)
+                    .join(" · "),
             disabled: true,
             tone: "plain" as const,
           },

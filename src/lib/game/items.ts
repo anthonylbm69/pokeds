@@ -4,7 +4,7 @@
  */
 
 import { maxHp, type Mon } from "./battle";
-import { MOVES, type MoveId } from "./data";
+import { MOVES, type MoveId, type StatKey } from "./data";
 
 export type ItemId =
   | "ball"
@@ -25,7 +25,27 @@ export type ItemId =
   | "elixir"
   | StoneId
   | RodId
+  | VitamineId
   | `ct-${MoveId}`;
+
+/**
+ * Les vitamines. Chacune pousse une statistique d'effort ; elles coûtent cher
+ * parce qu'elles remplacent des heures de combats bien choisis.
+ */
+export const VITAMINES = {
+  "ps-plus": { name: "PV Plus", stat: "hp" },
+  proteine: { name: "Protéine", stat: "atk" },
+  fer: { name: "Fer", stat: "def" },
+  "calcium": { name: "Calcium", stat: "spa" },
+  zinc: { name: "Zinc", stat: "spd" },
+  carbone: { name: "Carbone", stat: "spe" },
+} as const satisfies Record<string, { name: string; stat: StatKey }>;
+
+export type VitamineId = keyof typeof VITAMINES;
+
+/** Ce qu'une vitamine ajoute d'un coup, dans la limite des plafonds. */
+export const VITAMINE_EV = 10;
+const VITAMINE_PRICE = 3500;
 
 /** Les trois cannes, de la plus modeste à la plus sérieuse. */
 export const RODS = ["canne", "bonne-canne", "super-canne"] as const;
@@ -87,7 +107,8 @@ export type ItemKind =
   | "tenu"
   | "pp"
   | "pierre"
-  | "canne";
+  | "canne"
+  | "vitamine";
 
 export type Item = {
   name: string;
@@ -167,6 +188,13 @@ export const ctMove = (id: ItemId): MoveId | null =>
 const ctPrice = (move: MoveId) =>
   Math.max(1500, Math.round((MOVES[move].power || 60) * 40));
 
+const VITAMINE_ITEMS = Object.fromEntries(
+  (Object.keys(VITAMINES) as VitamineId[]).map((id) => [
+    id,
+    { name: VITAMINES[id].name, price: VITAMINE_PRICE, kind: "vitamine" as const },
+  ]),
+) as Record<ItemId, Item>;
+
 const ROD_ITEMS = Object.fromEntries(
   RODS.map((rod) => [
     rod,
@@ -200,6 +228,7 @@ export const ITEMS: Record<ItemId, Item> = {
   ...CT_ITEMS,
   ...STONE_ITEMS,
   ...ROD_ITEMS,
+  ...VITAMINE_ITEMS,
   ball: { name: "Poké Ball", price: 200, kind: "ball", bonus: 1 },
   superball: { name: "Super Ball", price: 600, kind: "ball", bonus: 1.5 },
   hyperball: { name: "Hyper Ball", price: 1200, kind: "ball", bonus: 2 },
@@ -269,6 +298,7 @@ export const ITEM_ORDER: ItemId[] = [
   "lunettes",
   "huile",
   "elixir",
+  ...(Object.keys(VITAMINES) as VitamineId[]),
   ...RODS,
   ...STONES,
   // Les Capsules ferment la marche : elles sont nombreuses et rares.
@@ -286,6 +316,7 @@ export const emptyBag = (): Bag => ({
   masterball: 0,
   restes: 0, ceinture: 0, "baie-oran": 0, "roche-royale": 0, lunettes: 0,
   huile: 0, elixir: 0,
+  ...Object.fromEntries(Object.keys(VITAMINES).map((v) => [v, 0])),
   ...Object.fromEntries(RODS.map((r) => [r, 0])),
   ...Object.fromEntries(STONES.map((s) => [s, 0])),
   ...Object.fromEntries(CT_MOVES.map((m) => [ctId(m), 0])),
@@ -399,6 +430,10 @@ export function refillPP(item: ItemId, mon: Mon, move = 0): Mon["moves"] {
       : m,
   );
 }
+
+/** Une vitamine pousse une statistique d'effort, et se boit. */
+export const isVitamine = (item: ItemId): item is VitamineId =>
+  ITEMS[item].kind === "vitamine";
 
 /**
  * Une canne ne se pose sur personne : elle se lance à l'eau, et ne se

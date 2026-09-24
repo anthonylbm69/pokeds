@@ -19,6 +19,7 @@ import {
   isPP,
   isRod,
   isStone,
+  isVitamine,
   type ItemId,
 } from "@/lib/game/items";
 import {
@@ -73,6 +74,7 @@ import {
   applyItem,
   applyPP,
   applyStone,
+  applyVitamine,
   enterHallOfFame,
   relearnMove,
   giveHeld,
@@ -1549,6 +1551,15 @@ export function useGame({
             i: 0,
             then: { do: "peche", id: prise.id, level: prise.level },
           });
+          return;
+        }
+
+        if (isVitamine(item)) {
+          const rang = Number(choice.id.split(":")[1]);
+          const bu = applyVitamine(game, item, rang);
+          setGame(bu.state);
+          setCursor(0);
+          setPhase({ kind: "sac", on: "objets", message: bu.message });
           return;
         }
 

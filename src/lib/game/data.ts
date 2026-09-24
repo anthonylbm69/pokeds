@@ -4,7 +4,7 @@
  * fournir les sprites, pour qu'un combat n'attende jamais le réseau.
  */
 
-import { DEX, EVOLUTIONS, type DexEntry, type EvoStep } from "./dex";
+import { DEX, EFFORT, EVOLUTIONS, type DexEntry, type EvoStep } from "./dex";
 import type { Moment } from "./heure";
 import type { Status } from "./battle";
 
@@ -29,6 +29,16 @@ export type TypeName =
   | "fairy";
 
 export type StatKey = "hp" | "atk" | "def" | "spa" | "spd" | "spe";
+
+/** Le nom de chaque statistique, tel qu'il s'affiche. */
+export const STAT_FR: Record<StatKey, string> = {
+  hp: "PV",
+  atk: "Attaque",
+  def: "Défense",
+  spa: "Attaque Spé.",
+  spd: "Défense Spé.",
+  spe: "Vitesse",
+};
 
 /** Les seules cases non neutres de la table des types. */
 const CHART: Partial<Record<TypeName, Partial<Record<TypeName, number>>>> = {
@@ -825,15 +835,60 @@ export const evolutionByStone = (id: number, stone: string): EvoStep | null =>
 
 /* -------------------------------------------------------------- formules */
 
-/** Statistique finale, formule Génération III et suivantes (EV nuls). */
+/**
+ * Plafonds des statistiques d'effort : deux cent cinquante-deux dans une
+ * seule, cinq cent dix en tout. On ne peut donc pas tout avoir — c'est
+ * précisément ce qui rend l'entraînement intéressant.
+ */
+export const EV_MAX_STAT = 252;
+export const EV_MAX_TOTAL = 510;
+
+export type Evs = Record<StatKey, number>;
+
+export const noEvs = (): Evs => ({ hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 });
+
+/** Ce qu'une espèce rapporte quand on la met à terre, statistique par statistique. */
+export function effortOf(id: number): Evs {
+  const [hp, atk, def, spa, spd, spe] = EFFORT[id] ?? [0, 0, 0, 0, 0, 0];
+  return { hp, atk, def, spa, spd, spe };
+}
+
+export const evTotal = (evs: Evs | undefined): number =>
+  evs ? Object.values(evs).reduce((somme, v) => somme + v, 0) : 0;
+
+/**
+ * Ajoute des EV en respectant les deux plafonds. Rend le tableau complété et
+ * ce qui a réellement été pris — le reste est perdu, comme dans les jeux.
+ */
+export function addEvs(evs: Evs | undefined, gain: Partial<Evs>): Evs {
+  const suite = { ...noEvs(), ...evs };
+  let reste = EV_MAX_TOTAL - evTotal(suite);
+  if (reste <= 0) return suite;
+  for (const clef of Object.keys(suite) as StatKey[]) {
+    const veut = gain[clef] ?? 0;
+    if (veut <= 0) continue;
+    const place = Math.min(veut, EV_MAX_STAT - suite[clef], reste);
+    if (place <= 0) continue;
+    suite[clef] += place;
+    reste -= place;
+  }
+  return suite;
+}
+
+/**
+ * Statistique finale, formule Génération III et suivantes. Les EV comptent
+ * pour un quart de leur valeur : quatre points d'effort valent un point de
+ * statistique au niveau cent.
+ */
 export function computeStat(
   base: number,
   iv: number,
   level: number,
   isHp: boolean,
+  ev = 0,
 ): number {
-  if (isHp) return Math.floor(((2 * base + iv) * level) / 100) + level + 10;
-  return Math.floor(((2 * base + iv) * level) / 100) + 5;
+  const socle = Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100);
+  return isHp ? socle + level + 10 : socle + 5;
 }
 
 /** Courbe « moyenne-rapide » : n³ points pour atteindre le niveau n. */

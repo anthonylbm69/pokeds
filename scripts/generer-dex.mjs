@@ -119,7 +119,11 @@ await enParallele([...Array(MAX).keys()].map((i) => i + 1), async (id) => {
     liste.find((e) => e.language.name === "en")?.[champ];
 
   const base = {};
-  for (const s of mon.stats) base[s.stat.name] = s.base_stat;
+  const effort = {};
+  for (const s of mon.stats) {
+    base[s.stat.name] = s.base_stat;
+    effort[s.stat.name] = s.effort ?? 0;
+  }
 
   fiches[id - 1] = {
     id,
@@ -127,6 +131,7 @@ await enParallele([...Array(MAX).keys()].map((i) => i + 1), async (id) => {
     genre: enFrancais(esp.genera, "genus") ?? "Pokémon",
     types: mon.types.sort((a, b) => a.slot - b.slot).map((t) => t.type.name),
     stats: STATS.map((s) => base[s] ?? 50),
+    effort: STATS.map((s) => effort[s] ?? 0),
     capture: esp.capture_rate ?? 45,
     exp: mon.base_experience ?? 60,
     // Le talent principal, celui qui n'est pas caché.
@@ -215,6 +220,10 @@ const ecrireBranche = (b) => {
   return `{ ${parts.join(", ")} }`;
 };
 
+const ligneEffort = fiches
+  .map((f) => `  ${f.id}: [${f.effort.join(", ")}],`)
+  .join("\n");
+
 const ligneEvolution = ([id, branches]) =>
   `  ${id}: [${branches.map(ecrireBranche).join(", ")}],`;
 
@@ -245,6 +254,15 @@ export type DexEntry = [
 
 export const DEX: Record<number, DexEntry> = {
 ${fiches.map(ligneFiche).join("\n")}
+};
+
+/**
+ * Ce que vaincre une espèce rapporte en statistiques d'effort, dans le même
+ * ordre que les statistiques de base. Les jeux appellent cela les EV : ils
+ * s'accumulent au fil des combats et finissent par peser autant qu'un niveau.
+ */
+export const EFFORT: Record<number, number[]> = {
+${ligneEffort}
 };
 
 /** Dernier numéro couvert : la Génération V s'arrête à Unys. */

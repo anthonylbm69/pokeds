@@ -5,8 +5,15 @@
 
 import {
   BONHEUR_DEPART,
+  EV_MAX_STAT,
+  EV_MAX_TOTAL,
   MOVES,
+  STAT_FR,
+  addEvs,
+  evTotal,
   evolutionByStone,
+  noEvs,
+  type StatKey,
   species,
   typedMoveset,
   type MoveId,
@@ -19,7 +26,10 @@ import {
   ctMove,
   effectOn,
   isStone,
+  isVitamine,
   normaliseBag,
+  VITAMINES,
+  VITAMINE_EV,
   ppEffectOn,
   refillPP,
   spend,
@@ -455,6 +465,50 @@ export function applyPP(
   };
 }
 
+/* ----------------------------------------------------------- vitamines */
+
+/** Ce qu'une vitamine ferait à ce Pokémon, et pourquoi elle ne ferait rien. */
+export function vitamineEffectOn(
+  item: ItemId,
+  mon: Mon | undefined,
+): { stat: StatKey | null; refus: string | null } {
+  if (!isVitamine(item)) return { stat: null, refus: "Ceci n'est pas une vitamine." };
+  if (!mon) return { stat: null, refus: "Aucun Pokémon à qui la donner." };
+  const stat = VITAMINES[item].stat;
+  const evs = { ...noEvs(), ...mon.evs };
+  if (evs[stat] >= EV_MAX_STAT) {
+    return { stat: null, refus: `${mon.name} ne progressera plus de ce côté.` };
+  }
+  if (evTotal(evs) >= EV_MAX_TOTAL) {
+    return { stat: null, refus: `${mon.name} a fini sa croissance.` };
+  }
+  return { stat, refus: null };
+}
+
+/** Fait boire une vitamine à un Pokémon de l'équipe. */
+export function applyVitamine(
+  state: GameState,
+  item: ItemId,
+  index: number,
+): { state: GameState; message: string } {
+  if (countOf(state.bag, item) <= 0) {
+    return { state, message: `Vous n'avez plus de ${ITEMS[item].name} !` };
+  }
+  const mon = state.party[index];
+  const { stat, refus } = vitamineEffectOn(item, mon);
+  if (refus || !stat) return { state, message: refus ?? "Rien ne se passe." };
+
+  const evs = addEvs(mon.evs, { [stat]: VITAMINE_EV });
+  return {
+    state: {
+      ...state,
+      bag: spend(state.bag, item),
+      party: state.party.map((m, i) => (i === index ? { ...m, evs } : m)),
+    },
+    message: `${mon.name} gagne en ${STAT_FR[stat]} !`,
+  };
+}
+
 /* ------------------------------------------------------------- pierres */
 
 /** Ce qu'une pierre ferait à ce Pokémon, et pourquoi elle ne ferait rien. */
@@ -831,6 +885,8 @@ function reviveMon(mon: Mon): Mon {
     held: mon.held ?? null,
     // Une partie d'avant le bonheur repart de la valeur de départ.
     bonheur: mon.bonheur ?? BONHEUR_DEPART,
+    // Une partie d'avant l'effort repart à zéro : rien ne change pour elle.
+    evs: { ...noEvs(), ...mon.evs },
     hp: 0,
   };
   remis.hp = Math.max(0, Math.min(mon.hp, maxHp(remis)));

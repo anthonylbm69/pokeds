@@ -13,8 +13,12 @@ import {
   MAX_LEVEL,
   MOVES,
   type Weather,
+  addEvs,
   effectiveness,
   computeStat,
+  effortOf,
+  noEvs,
+  type Evs,
   evolutionOnLevel,
   expForLevel,
   expGain,
@@ -66,6 +70,11 @@ export type Mon = {
    * seulement au bon moment de la journée.
    */
   bonheur: number;
+  /**
+   * Statistiques d'effort, gagnées en combattant. Ce que l'on affronte
+   * finit par compter autant que le nombre de combats.
+   */
+  evs: Evs;
 };
 
 export type Status = "poison" | "brulure" | "paralysie" | "sommeil" | "gel";
@@ -175,19 +184,25 @@ export function createMon(id: number, level: number, shiny?: boolean): Mon {
     nature: roll(NATURES.length),
     held: null,
     bonheur: BONHEUR_DEPART,
+    evs: noEvs(),
   };
   mon.hp = maxHp(mon);
   return mon;
 }
 
 export const maxHp = (mon: Mon) =>
-  computeStat(species(mon.id).base.hp, mon.ivs.hp, mon.level, true);
+  computeStat(species(mon.id).base.hp, mon.ivs.hp, mon.level, true, mon.evs?.hp ?? 0);
 
 export const statOf = (mon: Mon, key: Exclude<StatKey, "hp">) =>
   // La nature arrondit vers le bas, comme dans les jeux.
   Math.floor(
-    computeStat(species(mon.id).base[key], mon.ivs[key], mon.level, false) *
-      natureMult(mon.nature, key),
+    computeStat(
+      species(mon.id).base[key],
+      mon.ivs[key],
+      mon.level,
+      false,
+      mon.evs?.[key] ?? 0,
+    ) * natureMult(mon.nature, key),
   );
 
 export const typesOf = (mon: Mon): TypeName[] => species(mon.id).types;
@@ -783,9 +798,13 @@ export const EXP_SHARE = 0.5;
 function grantExp(state: BattleState, messages: string[]): void {
   const gain = expGain(species(state.foe.id).baseExp, state.foe.level);
   const combattant = activeMon(state);
+  // L'effort ne se partage pas : seul celui qui était sur le terrain
+  // s'entraîne vraiment. C'est ce qui rend le choix des adversaires utile.
+  const effort = effortOf(state.foe.id);
 
   for (const mon of state.party) {
     if (isKo(mon)) continue;
+    if (mon === combattant) mon.evs = addEvs(mon.evs, effort);
     const part = mon === combattant ? gain : Math.max(1, Math.floor(gain * EXP_SHARE));
     if (mon !== combattant) {
       // Le partage se résume à une ligne : six annonces noieraient le texte.
